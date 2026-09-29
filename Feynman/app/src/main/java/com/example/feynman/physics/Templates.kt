@@ -1,8 +1,8 @@
 package com.example.feynman.physics
 
-/** Ready-made diagrams to start from: textbook processes at tree level and one loop. */
+/** Ready-made diagrams to start from: textbook processes at tree level, one, two and three loops, and supersymmetry. */
 object Templates {
-    class Template(val name: String, val group: String, val diagram: Diagram, val about: String)
+    class Template(val name: String, val group: String, val diagram: Diagram, val about: String, val theory: Theory = Theory.SM)
 
     private class B(val name: String) {
         val points = ArrayList<Point>()
@@ -105,6 +105,37 @@ object Templates {
                 val h = p(0f, 110f); val v1 = p(100f, 110f); val v2 = p(210f, 40f); val v3 = p(210f, 180f); val g1 = p(320f, 0f); val g2 = p(320f, 220f)
                 l(h, v1, "h"); l(v1, v2, "t"); l(v2, v3, "t"); l(v3, v1, "t"); l(v2, g1, "A"); l(v3, g2, "A")
             }, "A triangle: finite, a C₀ function of m_t and m_h."),
+
+            Template("Two-loop sunset", "Two and three loops", d("Two-loop sunset") {
+                val a = p(0f, 110f); val v1 = p(100f, 110f); val v2 = p(220f, 110f); val b = p(320f, 110f)
+                l(a, v1, "phi4"); l(v1, v2, "phi4", 0.5f); l(v1, v2, "phi4"); l(v1, v2, "phi4", -0.5f); l(v2, b, "phi4")
+            }, "φ⁴'s two-loop self-energy: poles up to 1/ε², worked out by sector decomposition.", Theory.Phi4),
+            Template("Two-loop bubble chain", "Two and three loops", d("Two-loop bubble chain") {
+                val a = p(0f, 0f); val b = p(0f, 200f); val v1 = p(70f, 100f); val v2 = p(170f, 100f); val v3 = p(270f, 100f); val c = p(340f, 0f); val e = p(340f, 200f)
+                l(a, v1, "phi4"); l(b, v1, "phi4"); l(v1, v2, "phi4", 0.5f); l(v1, v2, "phi4", -0.5f); l(v2, v3, "phi4", 0.5f); l(v2, v3, "phi4", -0.5f); l(v3, c, "phi4"); l(v3, e, "phi4")
+            }, "Two bubbles in the s-channel of φφ → φφ: the square of the one-loop bubble.", Theory.Phi4),
+            Template("Three-loop bubble chain", "Two and three loops", d("Three-loop bubble chain") {
+                val a = p(0f, 0f); val b = p(0f, 200f); val v1 = p(50f, 100f); val v2 = p(130f, 100f); val v3 = p(210f, 100f); val v4 = p(290f, 100f); val c = p(340f, 0f); val e = p(340f, 200f)
+                l(a, v1, "phi4"); l(b, v1, "phi4"); l(v1, v2, "phi4", 0.5f); l(v1, v2, "phi4", -0.5f); l(v2, v3, "phi4", 0.5f); l(v2, v3, "phi4", -0.5f)
+                l(v3, v4, "phi4", 0.5f); l(v3, v4, "phi4", -0.5f); l(v4, c, "phi4"); l(v4, e, "phi4")
+            }, "Three loops: poles up to 1/ε³, a check of the numbers against the bubble cubed.", Theory.Phi4),
+
+            Template("e⁻e⁺ → γ̃γ̃", "Supersymmetry", d("e⁻e⁺ → γ̃γ̃") {
+                val a = p(0f, 0f); val b = p(0f, 180f); val v1 = p(160f, 30f); val v2 = p(160f, 150f); val c = p(320f, 0f); val e = p(320f, 180f)
+                l(a, v1, "e"); l(v1, v2, "seL"); l(v2, b, "e"); l(v1, c, "photino"); l(v2, e, "photino")
+            }, "Photino pairs by selectron exchange (add the u-channel and ẽ_R): Majorana spinors and fermion flow.", Theory.SQED),
+            Template("q q̄ → g̃ g̃", "Supersymmetry", d("q q̄ → g̃ g̃") {
+                val a = p(0f, 0f); val b = p(0f, 180f); val v1 = p(90f, 90f); val v2 = p(230f, 90f); val c = p(320f, 0f); val e = p(320f, 180f)
+                l(a, v1, "u"); l(v1, b, "u"); l(v1, v2, "g"); l(v2, c, "gluino"); l(e, v2, "gluino")
+            }, "Gluino pairs through a gluon: like heavy quarks, with the color factor of the octet.", Theory.SQCD),
+            Template("e⁻e⁺ → χ̃⁻₁χ̃⁺₁", "Supersymmetry", d("e⁻e⁺ → χ̃⁻₁χ̃⁺₁") {
+                val a = p(0f, 0f); val b = p(0f, 180f); val v1 = p(160f, 30f); val v2 = p(160f, 150f); val c = p(320f, 0f); val e = p(320f, 180f)
+                l(a, v1, "e"); l(v1, v2, "snue"); l(v2, b, "e"); l(c, v1, "ch1"); l(v2, e, "ch1")
+            }, "Chargino pairs by sneutrino exchange in the MSSM (add γ and Z in the s-channel).", Theory.MSSM),
+            Template("Wess–Zumino self-energy", "Supersymmetry", d("Wess–Zumino self-energy") {
+                val a = p(0f, 90f); val v1 = p(90f, 90f); val v2 = p(230f, 90f); val b = p(320f, 90f)
+                l(a, v1, "phiwz"); l(v1, v2, "psiwz", 0.45f); l(v1, v2, "psiwz", -0.45f); l(v2, b, "phiwz")
+            }, "The scalar's self-energy from a loop of Majorana fermions (symmetry factor 1/2).", Theory.WZ),
         )
     }
 }

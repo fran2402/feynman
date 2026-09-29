@@ -79,12 +79,12 @@ fun main(args: Array<String>) {
                 io = ext[p.id]?.let { if (it) com.example.feynman.physics.Io.In else com.example.feynman.physics.Io.Out } ?: p.io)
         })
         listOf(
-            Templates.Template(t.name + " (messy)", t.group, com.example.feynman.physics.Editing.normalized(messy), t.about),
-            Templates.Template(t.name + " (tidied)", t.group, com.example.feynman.physics.Editing.normalized(com.example.feynman.physics.Editing.tidy(messy)), t.about),
+            Templates.Template(t.name + " (messy)", t.group, com.example.feynman.physics.Editing.normalized(messy), t.about, t.theory),
+            Templates.Template(t.name + " (tidied)", t.group, com.example.feynman.physics.Editing.normalized(com.example.feynman.physics.Editing.tidy(messy)), t.about, t.theory),
         )
     }
     for ((ti, t) in list.withIndex()) {
-        val sol = Solver.solve(t.diagram, SolveOptions())
+        val sol = Solver.solve(t.diagram, SolveOptions(theory = t.theory))
         val width = 1100
         val layout = MathLayout(fonts, 17f * scale)
         val small = MathLayout(fonts, 13f * scale)
@@ -96,7 +96,7 @@ fun main(args: Array<String>) {
             for (b in s.blocks) when (b) {
                 is Block.Math -> items.add(Item(runCatching { layout.lines(MathParser.parse(b.tex), (width - 80) * 1f) }.getOrElse { small.lines(MathParser.parse("\\text{LAYOUT ERROR}"), 800f) }, null, ink, 8f * scale))
                 is Block.Rule -> {
-                    items.add(Item(null, "${b.what.replace(Regex("\\\\[a-z]+|[{}^_]"), "")}  (eq. ${b.eq})", Color.GRAY, 6f * scale))
+                    items.add(Item(null, "${b.what.replace(Regex("\\\\[a-z]+|[{}^_]"), "")}  ${b.tag}", Color.GRAY, 6f * scale))
                     items.add(Item(layout.lines(MathParser.parse(b.tex), (width - 80) * 1f), null, ink, 4f * scale))
                 }
                 is Block.Text -> items.add(Item(null, b.text, Color.DARK_GRAY, 6f * scale))

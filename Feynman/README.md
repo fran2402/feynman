@@ -14,12 +14,10 @@ The switcher at the top, as in CAS Calculator:
   same two points bends both, and dragging from a vertex back to itself makes a loop. The chip
   at the top shows the process and the number of loops, or what's wrong (a vertex the Standard
   Model doesn't have is marked in red). Tabs hold several diagrams; *Textbook diagrams* opens
-  22 ready-made ones.
-  - **Tidy** (the wand beside the tabs) makes a drawing readable without changing it: incoming
-    ends in a column on the left and outgoing ones on the right (in their order), vertices spaced
-    by a spring layout from left to right, everything on the grid, single lines straight, parallel
-    lines spread evenly and loops at a vertex pointing outwards. It can be undone; the target
-    button next to it brings the diagram back into view.
+  29 ready-made ones (including two- and three-loop and supersymmetric diagrams; picking one
+  switches to its theory if needed). The target button beside the tabs brings the diagram back
+  into view. Generated diagrams are laid out tidily (ends in columns, vertices spaced, lines
+  straight).
   - **Long-press** a palette key, a drawn line or a vertex for its card, as on CAS Calculator's
     keys: spin, charge, T³, color, mass (with its value), how it's drawn, its propagator, a line
     of theory, and every vertex of the paper it takes part in (drawn). For a drawn line the card
@@ -46,16 +44,42 @@ The switcher at the top, as in CAS Calculator:
     with); the loop's pole and finite part are evaluated for each Lorentz/Dirac structure, the
     Feynman-parameter integrals by Gauss–Legendre quadrature on the simplex (with Δ − i0
     above thresholds), and |ℳ|² at a point.
-- **Rules.** All 75 rules of the paper, drawn in its style and written with the η signs left in,
-  by section, with your current signs at the top.
+  - **two and three loops:** the denominators, the Feynman parameters and the Symanzik
+    polynomials 𝒰 = det M and ℱ = Qᵀadj(M)Q − 𝒰J, the shift of each loop momentum, the numerator
+    after Gaussian pairing of the loop momenta (each pair −½g^{μν}adj(M)_{ab}/𝒰, by the number of
+    pairs), and the parametric integral with its Γ(N − Ld/2 − r) and powers of 𝒰 and ℱ. Under
+    Numbers the coefficients of (i/16π²)^L ε^k, k = −2L … 0 (MS-bar), for each Lorentz/Dirac
+    structure, with errors: iterated sector decomposition (Binoth–Heinrich), Taylor subtraction
+    of the singular powers (the poles), and randomized quasi-Monte Carlo for the rest. With a
+    single scale and no masses it's computed at −v = 1 and continued analytically; above a
+    threshold (ℱ changing sign inside the region) it says a contour deformation would be needed.
+- **Rules.** Only the rules of the chosen theory, drawn and written out by section: the paper's
+  (with the η signs left in and your current signs at the top) and each model's own.
 
 ## Also in the app
 - **Zoom:** pinch with two fingers to zoom and pan, whatever tool is on; **double-tap** the canvas
-  to fit the whole diagram in view (Tidy does the same).
+  to fit the whole diagram in view.
 - **Theories** (Settings → Theory): the Standard Model; QED; QCD; scalar φ⁴ (with φ³); a type-II
   two-Higgs-doublet model (H, A, H± with couplings from the paper's rules times the usual
   α, β factors, as in the Higgs Hunter's Guide; the extra scalars' self-couplings aren't
-  included); and the Standard Model with a sequential Z′. The palette shows the theory's fields.
+  included); the Standard Model with a sequential Z′; and four supersymmetric theories:
+  - **Wess–Zumino:** a complex scalar φ and a Majorana ψ with W = mΦ²/2 + yΦ³/6 (its scalar
+    self-energy's pole comes out ∝ p² + m²: only wave-function renormalization).
+  - **Supersymmetric QED:** e, μ, their scalar partners ẽ_L, ẽ_R, μ̃_L, μ̃_R, the photon and the
+    photino, with the D-term four-scalar couplings.
+  - **Supersymmetric QCD:** squarks q̃_L, q̃_R and the gluino.
+  - **MSSM:** sleptons, sneutrinos, squarks (no left–right mixing), four neutralinos and two
+    charginos from M₁, M₂, μ and tan β (Martin's mass matrices, diagonalized numerically), the
+    gluino, and the type-II Higgs sector h, H, A, H±. Gauge couplings of the new fields come from
+    the paper's covariant derivative with its signs; gaugino and higgsino couplings are Martin's.
+    Settings → *Mixing matrices as numbers* (on by default) puts N, U and V in as decimals, which
+    keeps |ℳ|² short. Left out: A-terms, the MSSM's four-scalar and Higgs self-couplings.
+
+  Majorana fermions (drawn without an arrow; photino and gluino with a wave on the line) and
+  fermion-number-violating vertices use Denner's fermion flow: each line is read one way, a
+  vertex read against its written order gets Γ′ = CΓᵀC⁻¹, spinors follow from in/out, and in
+  |ℳ|² lines are transposed where needed to join the spin sums. The palette shows the theory's
+  fields (a scrolling row of groups for the MSSM).
 - **Gauges** (Settings → Gauge): Feynman–'t Hooft, Landau, general Rξ with ξ kept as a symbol
   (e⁺e⁻ → μ⁺μ⁻ comes out independent of ξ; the electron self-energy pole is e²ξp̸ − (3 + ξ)e²m),
   and unitary (no Goldstones or massive-boson ghosts). Gauge propagators with several
@@ -106,7 +130,10 @@ colors as in CAS Calculator.
   `Rules.kt` (the rules, eqs. 45–119, as algebra and as LaTeX), `RuleCatalog.kt` (as printed),
   `Diagram.kt` (topology, externals, loop count, momentum routing), `Amplitude.kt`,
   `Squared.kt`, `Loop.kt`, `Color.kt` (SU(3) with the Gell-Mann matrices), `Kinematics.kt`,
-  `Evaluate.kt`, `Solution.kt` (the steps), `Templates.kt`, `Editing.kt`.
+  `Evaluate.kt`, `Solution.kt` (the steps), `Templates.kt`, `Editing.kt`; `Susy.kt` (the
+  supersymmetric fields, mixing matrices and rules), `ModelRules.kt` (the models' rules for the
+  Rules panel), `MultiLoop.kt` (Symanzik polynomials, shifts, pairings) and `Sectors.kt`
+  (ε-series, sector decomposition, subtraction and quasi-Monte Carlo).
 - `latex/MathLayout.kt`: a small TeX (parser and box layout, line breaking at +, − and =) in
   Computer Modern, drawn by the app with Android's Canvas.
 - `draw/`: the line shapes (waves, coils, dashes, dots, arrows, momentum arrows) and TikZ export.
@@ -128,7 +155,18 @@ against quadrature, diagram counts, tidy and the 2HDM scaling of h → bb̄; and
 contractions; e⁻e⁺ → μ⁻μ⁺ (2e⁴(t² + u²)/s² massless, and the full massive formula); Bhabha
 scattering with its interference sign; the QED vacuum polarization (transverse, pole
 −(4/3)e²(p²g − pp), finite part against a direct integration) and the electron self-energy pole
-e²(p̸ − 4m); that all 22 templates solve and every rule (45)–(119) is listed.
+e²(p̸ − 4m); that all templates solve and every rule (45)–(119) is listed.
+
+Supersymmetry: e⁺e⁻ → γ̃γ̃ is a P wave with the known t/u shape, e⁻e⁻ → ẽ_R⁻ẽ_R⁻ needs the Majorana
+mass (t and u adding), q q̄ → g̃g̃ is q q̄ → QQ̄ times 6, the Wess–Zumino mass isn't renormalized,
+the neutralino, chargino and W Goldstone couplings obey their Ward identities (∝ mass
+differences, 1/m_Z and 1/m_W), and W⁺W⁻ → χ̃⁺χ̃⁻, ZZ → χ̃⁰χ̃⁰ and e⁻Z → ẽ_L χ̃⁰ stay bounded at high
+energy in the unitary gauge.
+
+Loops: the multi-loop engine agrees with the one-loop code (poles and finite parts), and with
+exact results for the massless two-loop sunset (space- and timelike), the sunset with a k₁·k₂
+numerator, the three-loop banana and the three-loop bubble chain (G-functions), and the
+massive double bubble's poles against the one-loop bubble.
 
 `preview-render/` holds two of those renders.
 

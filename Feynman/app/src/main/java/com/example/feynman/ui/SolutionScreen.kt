@@ -46,6 +46,7 @@ import com.example.feynman.physics.Block
 import com.example.feynman.physics.Evaluate
 import com.example.feynman.physics.Numbers
 import com.example.feynman.physics.Kinematics
+import com.example.feynman.physics.MultiLoop
 import com.example.feynman.physics.Observables
 import com.example.feynman.physics.Solver
 import kotlinx.coroutines.Dispatchers
@@ -142,7 +143,7 @@ private fun NumbersCard(vm: FeynmanViewModel, s: Solution) {
         Text("Numbers", style = MaterialTheme.typography.titleMedium, color = colors.primary)
         Text("Masses and energies in GeV (Standard Model values to start with).", style = MaterialTheme.typography.bodySmall, color = inkVariant())
         val fields: List<Pair<String, String>> = s.symbols.map { it.name.removeSuffix("*") to it.tex.removeSuffix("^{*}") }.distinct() +
-            (if (s.loop != null) listOf("mu" to "\\mu") else emptyList())
+            (if (s.loop != null || s.multiLoop != null) listOf("mu" to "\\mu") else emptyList())
         for ((name, tex) in fields) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(64.dp)) { MathTex(tex, fontSize = 17.sp, wrap = false) }
@@ -182,11 +183,53 @@ private fun NumbersCard(vm: FeynmanViewModel, s: Solution) {
                 for ((name, v) in integrals) MathTex("$name = ${Numbers.texOfComplex(v)}", Modifier.fillMaxWidth(), fontSize = 16.sp)
             }
         }
+        s.multiLoop?.let { MultiLoopNumbers(it, values, vm.mu.toDoubleOrNull() ?: 91.188) }
         val sq = s.squared
         if (sq != null) {
             val v = remember(sq, values) { Evaluate.scalar(sq.result, values) }
             if (v == null) Text("Give every symbol a number.", color = colors.error)
             else MathTex("\\overline{|\\mathcal{M}|^{2}} = ${Numbers.texOfComplex(v)}", fontSize = 18.sp)
+        }
+    }
+}
+
+/** Two- and three-loop integrals: the Laurent coefficients by sector decomposition, off the main thread. */
+@Composable
+private fun MultiLoopNumbers(r: MultiLoop.Result, values: Map<String, Double>, mu: Double) {
+    val colors = MaterialTheme.colorScheme
+    var precise by remember { mutableStateOf(false) }
+    val acc = if (precise) MultiLoop.Accuracy(16384, 6) else MultiLoop.Accuracy(2048, 4)
+    val rows by produceState<List<MultiLoop.Row>?>(null, r, values, mu, precise) {
+        value = null
+        value = withContext(Dispatchers.Default) {
+            runCatching {
+                MultiLoop.evaluate(r, values, mu, { i -> Amplitude.spinorTex(r.chains[i].left) + "\\," }, { i -> "\\," + Amplitude.spinorTex(r.chains[i].right) }, acc)
+            }.getOrElse { emptyList() }
+        }
+    }
+    val l = r.loops
+    Text("iℳ = (i/16π²)^$l × Σ c_k ε^k (MS-bar, μ̄ = μ), for each structure:", style = MaterialTheme.typography.bodySmall, color = inkVariant())
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("More precise (slower)", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = precise, onCheckedChange = { precise = it })
+    }
+    val list = rows
+    if (list == null) {
+        Text("Sector decomposition and quasi-Monte Carlo integration in progress…", style = MaterialTheme.typography.bodySmall, color = inkVariant())
+        return
+    }
+    if (list.isEmpty()) { Text("Give every symbol a number.", color = colors.error); return }
+    for (row in list) {
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surfaceContainerHigh).padding(12.dp)) {
+            MathTex(row.structureTex.ifEmpty { "1" }, fontSize = 16.sp)
+            if (row.note != null) Text(row.note, style = MaterialTheme.typography.bodySmall, color = colors.error)
+            else for ((i, kc) in row.coefficients.withIndex()) {
+                val (k, c) = kc
+                if (c.abs == 0.0 && k < 0) continue
+                val label = when (k) { 0 -> "\\epsilon^{0}"; -1 -> "\\frac{1}{\\epsilon}"; else -> "\\frac{1}{\\epsilon^{${-k}}}" }
+                val err = row.errors.getOrElse(i) { 0.0 }
+                MathTex("$label:\\ ${Numbers.texOfComplex(c)}${if (err > 0) "\\ \\pm ${Numbers.texOf(err)}" else ""}", fontSize = 16.sp)
+            }
         }
     }
 }

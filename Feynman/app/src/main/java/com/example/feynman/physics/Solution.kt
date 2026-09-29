@@ -41,6 +41,8 @@ class Solution(
     val issues: List<Issue>,
     /** Every symbol a numerical evaluation needs a value for. */
     val symbols: List<Sym>,
+    /** Two or more loops: the parametric integrals, evaluated under Numbers. */
+    val multiLoop: MultiLoop.Result? = null,
 )
 
 object Solver {
@@ -120,7 +122,7 @@ object Solver {
             add(Block.Text(when (topo.loops) {
                 0 -> "Tree level: ${topo.vertices.size} vertices, ${topo.internal.size} internal line${if (topo.internal.size == 1) "" else "s"}."
                 1 -> "One loop, loop momentum \\(k\\)."
-                else -> "${topo.loops} loops."
+                else -> "${topo.loops} loops, loop momenta \\(${topo.loopMomenta.joinToString(", ") { MomNames.tex(it) }}\\)."
             }))
         }))
         if (amp.issues.isNotEmpty()) {
@@ -157,6 +159,7 @@ object Solver {
         }))
         var squared: SquaredResult? = null
         var loop: LoopResult? = null
+        var multi: MultiLoop.Result? = null
         val kin = Kinematics(topo.externals, ctx.massOf)
         if (topo.loops == 0) {
             if (topo.externals.size >= 3) {
@@ -185,14 +188,21 @@ object Solver {
             loop = Loop.evaluate(amp, kin)
             if (loop != null) steps.addAll(loopSteps(amp, loop, kin, ctx, others))
         } else {
-            steps.add(Step("Loop integrals", listOf(Block.Text("Integrals with ${topo.loops} loops are written out above but not evaluated: the app works one-loop integrals through."))))
+            multi = MultiLoop.prepare(amp, kin)
+            if (multi != null) steps.addAll(multiLoopSteps(multi, amp))
+            else steps.add(Step("Loop integrals", listOf(Block.Text("No loop propagators to integrate."))))
         }
         val symbols = (listOfNotNull(squared?.dots, squared?.result, loop?.pole).flatMap { it.atoms() } +
-            (loop?.pieces.orEmpty().flatMap { it.finiteIntegrand.atoms() + it.delta.atoms() }))
+            (loop?.pieces.orEmpty().flatMap { it.finiteIntegrand.atoms() + it.delta.atoms() }) +
+            multi?.pieces.orEmpty().flatMap { p -> p.f.atoms() + p.u.atoms() + p.reduced.values.flatMap { it.atoms() } })
             .flatMap { a -> if (a is Den) a.content.atoms() else listOf(a) }
-            .filterIsInstance<Sym>().filter { it != Loop.deltaSym && it != Loop.lnDelta && it != Rules.sqrt2 && !(loop?.pieces.orEmpty().any { p -> it in p.xs }) }
+            .filterIsInstance<Sym>().filter { it != Loop.deltaSym && it != Loop.lnDelta && it != Rules.sqrt2 && it != MultiLoop.uInverse && !(loop?.pieces.orEmpty().any { p -> it in p.xs }) && !(multi?.pieces.orEmpty().any { p -> it in p.xs }) }
+            .let { list ->
+                // The MSSM's mixing matrices and ino masses follow from M₁, M₂, μ and tan β: ask for those.
+                if (list.any { it.name in SUSY.derived }) list.filter { it.name !in SUSY.derived } + SUSY.inputs else list
+            }
             .distinctBy { it.name }.sortedBy { it.key }
-        return Solution(steps, amp, loop, squared, amp.issues, symbols)
+        return Solution(steps, amp, loop, squared, amp.issues, symbols, multi)
     }
 
     private fun sign(n: Int) = if (n > 0) "+" else "−"
@@ -273,6 +283,50 @@ object Solver {
             add(Block.Text("Two-point integrals are evaluated in closed form (every \\(\\int_0^1 x^k \\ln\\Delta\\,dx\\) exactly, at the roots of the quadratic \\(\\Delta\\)); \\(C_0\\) with its inner integral in closed form; \\(D_0\\) numerically. Values are under Numbers."))
         }))
         Renorm.steps(amp, r, ctx, others)?.let { steps.add(it) }
+        return steps
+    }
+
+    /** Two or three loops: the Symanzik polynomials, the shift, the pairings and the parametric integral. */
+    private fun multiLoopSteps(r: MultiLoop.Result, amp: Amplitude): List<Step> {
+        val steps = ArrayList<Step>()
+        val open = { i: Int -> Amplitude.spinorTex(r.chains[i].left) + "\\, " }
+        val close = { i: Int -> "\\, " + Amplitude.spinorTex(r.chains[i].right) }
+        val l = r.loops
+        val many = r.pieces.size > 1
+        fun cap(t: String) = if (t.length > 6000) t.take(6000).substringBeforeLast(" + ") + " + \\cdots" else t
+        for ((pi, piece) in r.pieces.withIndex()) {
+            val suffix = if (many) " (integral ${pi + 1})" else ""
+            val n = piece.n
+            val xs = piece.xs.map { it.tex }
+            steps.add(Step("Denominators$suffix", buildList {
+                piece.denominators.forEachIndexed { i, d -> add(Block.Math("D_{${i + 1}} = $d")) }
+                if (pi == 0) add(Block.Text("$l loops in \\(d = 4 - 2\\epsilon\\) dimensions: each \\(\\int d^4k/(2\\pi)^4 \\to \\mu^{2\\epsilon}\\int d^dk/(2\\pi)^d\\)."))
+            }))
+            steps.add(Step("Feynman parameters$suffix", buildList {
+                add(Block.Math("\\frac{1}{D_{1}\\cdots D_{$n}} = (-1)^{$n}\\,${factorial(n - 1).let { if (it == 1L) "" else "$it\\," }}\\int_{0}^{\\infty}${xs.joinToString("") { "d$it\\," }}\\frac{\\delta\\left(1 - ${xs.joinToString(" - ")}\\right)}{\\left(${(1..n).joinToString(" + ") { "${xs[it - 1]}(-D_{$it})" }}\\right)^{$n}}"))
+                add(Block.Text("With \\(\\sum x_j(-D_j) = -k^{T}Mk - 2k\\cdot Q - J\\), the Symanzik polynomials are \\(\\mathcal{U} = \\det M\\) and \\(\\mathcal{F} = Q^{T}\\mathrm{adj}(M)\\,Q - \\mathcal{U}J\\) (with \\(-i0\\)):"))
+                add(Block.Math("\\mathcal{U} = ${Tex.of(piece.u)}"))
+                add(Block.Math("\\mathcal{F} = ${cap(Tex.of(piece.f))}"))
+                add(Block.Text("The loop momenta are shifted to complete the square:"))
+                piece.shifts.forEach { add(Block.Math(it)) }
+            }))
+            steps.add(Step("Numerator$suffix", buildList {
+                add(Block.Text("After the shift, odd powers of \\(\\ell\\) vanish and the others pair up, each pair \\(\\ell_a^\\mu\\ell_b^\\nu \\to -\\tfrac{1}{2}g^{\\mu\\nu}\\,\\mathrm{adj}(M)_{ab}/\\mathcal{U}\\) (Gaussian integration). By the number \\(r\\) of pairs:"))
+                for ((rr, e) in piece.reduced.toSortedMap()) add(Block.Math("P_{$rr} = ${cap(Tex.of(e, IndexNames(), open, close))}"))
+                if (piece.reduced.isEmpty()) add(Block.Text("The numerator integrates to zero."))
+            }))
+            steps.add(Step("Parametric integral$suffix", buildList {
+                add(Block.Text("With \\(\\int d^dk/(2\\pi)^d = \\frac{i}{16\\pi^2}(4\\pi)^\\epsilon\\int d^dk/(i\\pi^{d/2})\\) and each loop's \\((4\\pi)^\\epsilon e^{-\\gamma_E\\epsilon}\\) in \\(\\bar\\mu\\) (MS-bar):"))
+                add(Block.Math("i\\mathcal{M} = \\left(\\frac{i}{16\\pi^{2}}\\right)^{$l} e^{$l\\gamma_E\\epsilon}\\,\\bar\\mu^{${2 * l}\\epsilon}(-1)^{$n}\\sum_{r} \\Gamma\\left($n - ${2 * l} - r + ${l}\\epsilon\\right)\\int dx\\,\\delta\\left(1 - \\sum x\\right) P_r\\,\\mathcal{U}^{${n - 2 * (l + 1)} + ${l + 1}\\epsilon - 2r - s}\\,\\mathcal{F}^{${2 * l - n} - ${l}\\epsilon + r}"))
+                add(Block.Text("(\\(s\\): the power of \\(1/\\mathcal{U}\\) in each term of \\(P_r\\).)"))
+                piece.scale?.let { add(Block.Text("One scale and no masses: \\(\\mathcal{F} = -${it.tex}\\,\\mathcal{F}_0\\), so the integral is worked out at \\(${it.tex} = -1\\) and continued with \\((-${it.tex} - i0)^{a_F}\\).")) }
+            }))
+        }
+        steps.add(Step("Sector decomposition", buildList {
+            add(Block.Text("The integrals over the Feynman parameters have singularities where several \\(x\\) vanish: these are the poles in \\(\\epsilon\\) (up to \\(1/\\epsilon^{${2 * l}}\\)). The simplex is split where each \\(x\\) is largest, and each piece again until \\(\\mathcal{U}\\) and \\(\\mathcal{F}\\) are a monomial times a polynomial that doesn't vanish (Binoth and Heinrich). Every singular power \\(t^{-1-n+b\\epsilon}\\) is Taylor-subtracted and integrated exactly, which gives the poles; what's left is expanded in \\(\\epsilon\\) and integrated by quasi-Monte Carlo."))
+            add(Block.Text("The coefficients of \\((i/16\\pi^2)^{$l}\\,\\epsilon^k\\) for each structure, with their errors, are under Numbers. Above a threshold \\(\\mathcal{F}\\) changes sign in the integration region; that needs a contour deformation, which isn't done."))
+            r.notes.forEach { add(Block.Note(it)) }
+        }))
         return steps
     }
 

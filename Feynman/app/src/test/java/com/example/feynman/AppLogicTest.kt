@@ -12,9 +12,9 @@ import kotlin.math.ln
 class AppLogicTest {
     @Test fun everyTemplateSolves() {
         for (t in Templates.all) {
-            val s = Solver.solve(t.diagram, SolveOptions())
+            val s = Solver.solve(t.diagram, SolveOptions(theory = t.theory))
             assertTrue("${t.name}: ${s.issues.map { it.message }}", s.issues.isEmpty())
-            assertTrue(t.name, s.squared != null || s.loop != null)
+            assertTrue(t.name, s.squared != null || s.loop != null || s.multiLoop != null)
             // Every formula parses.
             for (step in s.steps) for (b in step.blocks) if (b is Block.Math) MathParser.parse(b.tex)
         }

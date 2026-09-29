@@ -500,8 +500,18 @@ class MathLayout(private val fonts: MathFonts, private val size: Float) {
                 draws.add(Draw.Rule(c - t, y - t, 2 * t, 2 * t))
                 Box(body.width, body.ascent + sz * 0.18f, body.descent, draws)
             }
+            "tilde", "widetilde" -> {
+                // A small wave over the letter, drawn (the fonts' tilde glyphs differ).
+                val y = -(body.ascent + sz * 0.16f)
+                val x0 = body.width * 0.08f + skew
+                val w = max(body.width * 0.84f, sz * 0.36f)
+                val amp = sz * 0.055f
+                val pts = (0..12).map { k -> val u = k / 12f; (x0 + w * u) to (y - amp * kotlin.math.sin(u * 2 * Math.PI).toFloat()) }
+                draws.add(Draw.Stroke(pts, t * 0.9f))
+                Box(max(body.width, x0 + w), body.ascent + sz * 0.26f, body.descent, draws)
+            }
             else -> {
-                // hat and tilde as the font's accents over the middle.
+                // hat as the font's accent over the middle.
                 val mark = if (n.kind.contains("tilde")) "~" else "^"
                 val m = glyph(mark, MathFont.Roman, level)
                 draws.addAll(m.shifted((body.width - m.width) / 2 + skew, -(body.ascent - sz * 0.45f)))

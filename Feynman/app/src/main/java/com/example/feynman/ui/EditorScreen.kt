@@ -357,14 +357,19 @@ private fun TemplatesPage(vm: FeynmanViewModel, onClose: () -> Unit) {
             for (t in Templates.all.filter { it.group == group }) {
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(colors.surfaceContainerHigh)
-                        .clickable { vm.open(t.diagram); onClose() }.padding(12.dp),
+                        .clickable {
+                            // Switch to the diagram's theory when the one chosen doesn't have its particles.
+                            val ok = t.diagram.lines.all { l -> SM.byId(l.particle)?.let { AppSettings.theory.allows(it) } == true }
+                            if (!ok) AppSettings.changeTheory(t.theory)
+                            vm.open(t.diagram); onClose()
+                        }.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     DiagramThumbnail(t.diagram, Modifier.width(120.dp).height(76.dp), labels = false)
                     Column(Modifier.weight(1f)) {
                         Text(t.name, style = MaterialTheme.typography.titleSmall)
-                        Text(t.about, style = MaterialTheme.typography.bodySmall, color = inkVariant())
+                        Text(t.about + if (t.theory != Theory.SM) " (${t.theory.label})" else "", style = MaterialTheme.typography.bodySmall, color = inkVariant())
                     }
                 }
             }
