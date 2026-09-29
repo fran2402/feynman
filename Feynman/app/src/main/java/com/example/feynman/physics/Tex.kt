@@ -111,9 +111,11 @@ object Tex {
         val num = StringBuilder()
         if (complexCoef != null) num.append(complexCoef)
         val symbols = numParts.joinToString(" ")
-        val coefPart = if (coefNum == BigInteger.ONE) "" else coefNum.toString()
+        // Numbers put in as decimals (the MSSM's mixing matrices) are printed as decimals.
+        val decimal = isDecimal(coefDen)
+        val coefPart = if (decimal) decimalText(coefNum, coefDen) else if (coefNum == BigInteger.ONE) "" else coefNum.toString()
         val top = listOf(coefPart, if (imagUnit) "i" else "", symbols).filter { it.isNotEmpty() }.joinToString(" ").trim()
-        val bottom = listOf(if (coefDen == BigInteger.ONE) "" else coefDen.toString(), denParts.joinToString(" ")).filter { it.isNotEmpty() }.joinToString(" ")
+        val bottom = listOf(if (coefDen == BigInteger.ONE || decimal) "" else coefDen.toString(), denParts.joinToString(" ")).filter { it.isNotEmpty() }.joinToString(" ")
         val scalar = when {
             complexCoef != null && bottom.isEmpty() -> (complexCoef + " " + symbols).trim()
             complexCoef != null -> "\\frac{${(complexCoef + " " + symbols).trim()}}{$bottom}"
@@ -129,6 +131,19 @@ object Tex {
         }
         return sign to body
     }
+
+    /** A denominator 2^a·5^b ≥ 10⁴: the number came from a decimal. */
+    private fun isDecimal(d: BigInteger): Boolean {
+        if (d < BigInteger.valueOf(10_000)) return false
+        var x = d
+        val two = BigInteger.valueOf(2); val five = BigInteger.valueOf(5)
+        while (x.mod(two).signum() == 0) x /= two
+        while (x.mod(five).signum() == 0) x /= five
+        return x == BigInteger.ONE
+    }
+
+    private fun decimalText(n: BigInteger, d: BigInteger): String =
+        java.math.BigDecimal(n).divide(java.math.BigDecimal(d), java.math.MathContext(4)).stripTrailingZeros().toPlainString()
 
     private data class Coef(val sign: Int, val num: BigInteger, val den: BigInteger, val imag: Boolean, val complex: String?)
 

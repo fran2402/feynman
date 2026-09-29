@@ -63,6 +63,9 @@ object AppSettings {
     /** Breit–Wigner widths for unstable particles in cross sections and widths. */
     var widths by mutableStateOf(true)
         private set
+    /** MSSM: the mixing matrices N, U, V as numbers (from M₁, M₂, μ, tan β) rather than symbols. */
+    var numericMixing by mutableStateOf(true)
+        private set
 
     val mathScale: Float get() = when (mathSize) { 0 -> 0.85f; 2 -> 1.18f; else -> 1f }
 
@@ -88,6 +91,7 @@ object AppSettings {
         theory = runCatching { Theory.valueOf(p.getString("theory", null)!!) }.getOrDefault(Theory.SM)
         gauge = runCatching { Gauge.valueOf(p.getString("gauge", null)!!) }.getOrDefault(Gauge.Feynman)
         widths = p.getBoolean("widths", true)
+        numericMixing = p.getBoolean("numericMixing", true)
     }
 
     private fun save(key: String, value: Any) {
@@ -114,4 +118,5 @@ object AppSettings {
     fun changeTheory(v: Theory) { theory = v; save("theory", v.name) }
     fun changeGauge(v: Gauge) { gauge = v; save("gauge", v.name) }
     fun changeWidths(v: Boolean) { widths = v; save("widths", v) }
+    fun changeNumericMixing(v: Boolean) { numericMixing = v; save("numericMixing", v) }
 }

@@ -99,7 +99,7 @@ object Squared {
             return Color.tensor(factors, externals)
         }
 
-        var total = Expr.ZERO
+        val sum = ExprSum()
         for (a in amps) for (b in amps) {
             val sign = a.fermionSign * b.fermionSign
             for (ta in a.terms) for (tb in b.terms) {
@@ -107,9 +107,10 @@ object Squared {
                 if (color.isZero) continue
                 val conjB = conjugate(tb.expr)
                 val piece = pairUp(ta.expr, a, conjB, b, kin)
-                total += piece * color * CQ.of(sign.toLong())
+                sum.add(piece, color * CQ.of(sign.toLong()))
             }
         }
+        var total = sum.toExpr()
         total = Rules.simplifyRoots(total.substitute(Dim, Expr.const(4))) * average
         val dots = total
         val result = Rules.simplifyRoots(kin.apply(total))
@@ -122,17 +123,63 @@ object Squared {
      * followed through both into traces.
      */
     private fun pairUp(ea: Expr, a: Amplitude, eb: Expr, b: Amplitude, kin: Kinematics): Expr {
-        var out = Expr.ZERO
-        // Legs by number: the spinor sums.
+        val out = ExprSum()
+        // Each leg must sit at the same end of its line in ℳ and ℳ*; with Majorana fermions or
+        // fermion-number-violating vertices a line may have to be transposed first:
+        // X̄₁ΓY₂ = −Ȳ′₂Γ′X′₁ (Γ′ = CΓᵀC⁻¹, u ↔ v at both ends).
+        val (ta, tb) = transposes(a, b)
+        val ends = a.chains.mapIndexed { i, ch -> if (ta[i]) ch.rightLeg to ch.leftLeg else ch.leftLeg to ch.rightLeg }
         val spinorOf = HashMap<Int, Spinor>()
-        a.chains.forEach { spinorOf[it.leftLeg.number] = it.left; spinorOf[it.rightLeg.number] = it.right }
-        for ((k1, c1) in ea.terms) for ((k2, c2) in eb.terms) {
+        val original = HashMap<Int, Spinor>()
+        a.chains.forEach { original[it.leftLeg.number] = it.left; original[it.rightLeg.number] = it.right }
+        for ((l, r) in ends) {
+            val sl = original[l.number]!!; val sr = original[r.number]!!
+            spinorOf[l.number] = Spinor(if (l.incoming) Spinor.Kind.VBar else Spinor.Kind.UBar, sl.p, sl.mass)
+            spinorOf[r.number] = Spinor(if (r.incoming) Spinor.Kind.U else Spinor.Kind.V, sr.p, sr.mass)
+        }
+        // Terms with the same Dirac strings and the same indexed factors (vectors, metrics, ε)
+        // share their traces and contractions: only the scalar coefficients differ.
+        val sa = structures(ea); val sb = structures(eb)
+        for ((ka, ca) in sa) for ((kb, cb) in sb) {
+            val shape = shape(ka, kb, a, b, ta, tb, spinorOf, kin)
+            if (shape.isZero) continue
+            out.addProduct(shape, ca * cb)
+        }
+        return out.toExpr()
+    }
+
+    private fun structures(e: Expr): Map<TermKey, Expr> {
+        val out = LinkedHashMap<TermKey, Expr>()
+        for ((k, c) in e.terms) {
+            val indexed = k.mono.factors.filter { (at, _) -> at is Vec || at is Met || at is Eps }
+            val scalar = k.mono.factors.filter { (at, _) -> !(at is Vec || at is Met || at is Eps) }
+            val key = TermKey(Mono(indexed), k.chains)
+            out[key] = (out[key] ?: Expr.ZERO) + Expr(mapOf(TermKey(Mono(scalar), emptyList()) to c))
+        }
+        return out.filterValues { !it.isZero }
+    }
+
+    /** Traces and contractions for one structure of ℳ and one of ℳ*. */
+    private fun shape(k1: TermKey, k2: TermKey, a: Amplitude, b: Amplitude, ta: BooleanArray, tb: BooleanArray, spinorOf: Map<Int, Spinor>, kin: Kinematics): Expr {
+        fun turn(str: GString): Pair<GString, Long> {
+            var sign = -1L
+            str.forEach { if (it !is G.Five) sign = -sign }
+            return str.reversed() to sign
+        }
+        run {
             val mono = k1.mono * k2.mono
-            var scalar = Expr(mapOf(TermKey(mono, emptyList()) to c1 * c2))
-            scalar = polarizationSums(scalar, a, kin)
+            var factor = CQ.ONE
             // Chains of ℳ: left leg → right leg. Barred chains of ℳ*: they run the other way.
-            val mChains = a.chains.mapIndexed { i, ch -> Triple(ch.leftLeg.number, ch.rightLeg.number, k1.chains[i]) }
-            val cChains = b.chains.mapIndexed { i, ch -> Triple(ch.rightLeg.number, ch.leftLeg.number, k2.chains[i]) }
+            val mChains = a.chains.mapIndexed { i, ch ->
+                if (!ta[i]) Triple(ch.leftLeg.number, ch.rightLeg.number, k1.chains[i])
+                else turn(k1.chains[i]).let { (s, sg) -> factor = factor * CQ.of(sg); Triple(ch.rightLeg.number, ch.leftLeg.number, s) }
+            }
+            val cChains = b.chains.mapIndexed { i, ch ->
+                if (!tb[i]) Triple(ch.rightLeg.number, ch.leftLeg.number, k2.chains[i])
+                else turn(k2.chains[i]).let { (s, sg) -> factor = factor * CQ.of(sg); Triple(ch.leftLeg.number, ch.rightLeg.number, s) }
+            }
+            var scalar = Expr(mapOf(TermKey(mono, emptyList()) to factor))
+            scalar = polarizationSums(scalar, a, kin)
             val done = HashSet<Int>()
             var traces = Expr.ONE
             for (start in mChains.indices) {
@@ -153,9 +200,45 @@ object Squared {
                 val tr = d.mapTerms { k, c -> trace(k.chains.first()) * Expr(mapOf(TermKey(k.mono, emptyList()) to c)) }
                 traces *= tr
             }
-            out += contract(scalar * traces)
+            return contract(scalar * traces)
         }
-        return out
+    }
+
+    /**
+     * Which lines of ℳ and of ℳ* to transpose so that every leg is on the same end in both:
+     * t_a xor t_b = end_a xor end_b for each leg, solved line by line.
+     */
+    private fun transposes(a: Amplitude, b: Amplitude): Pair<BooleanArray, BooleanArray> {
+        val na = a.chains.size
+        val ta = BooleanArray(na); val tb = BooleanArray(b.chains.size)
+        // Node i < na: a's line i; na + j: b's line j. Edges carry the required xor.
+        val where = HashMap<Int, MutableList<Pair<Int, Int>>>()
+        a.chains.forEachIndexed { i, ch -> where.getOrPut(ch.leftLeg.number) { ArrayList() }.add(i to 0); where.getOrPut(ch.rightLeg.number) { ArrayList() }.add(i to 1) }
+        b.chains.forEachIndexed { j, ch -> where.getOrPut(ch.leftLeg.number) { ArrayList() }.add(na + j to 0); where.getOrPut(ch.rightLeg.number) { ArrayList() }.add(na + j to 1) }
+        val adj = HashMap<Int, MutableList<Pair<Int, Int>>>()
+        for ((_, list) in where) {
+            if (list.size != 2) continue
+            val (x, y) = list
+            val w = x.second xor y.second
+            adj.getOrPut(x.first) { ArrayList() }.add(y.first to w)
+            adj.getOrPut(y.first) { ArrayList() }.add(x.first to w)
+        }
+        val value = HashMap<Int, Int>()
+        for (root in 0 until na + b.chains.size) {
+            if (root in value) continue
+            value[root] = 0
+            val queue = ArrayDeque(listOf(root))
+            while (queue.isNotEmpty()) {
+                val u = queue.removeFirst()
+                for ((v, w) in adj[u] ?: emptyList()) {
+                    val want = value[u]!! xor w
+                    if (v !in value) { value[v] = want; queue.add(v) }
+                }
+            }
+        }
+        for (i in 0 until na) ta[i] = value[i] == 1
+        for (j in b.chains.indices) tb[j] = value[na + j] == 1
+        return ta to tb
     }
 
     /** ε_n^μ ε_n^{*ν} → −g^{μν} (+ k^μk^ν/M² when massive). */

@@ -157,7 +157,7 @@ object Renorm {
             val l = x.line
             lines.add(if (l.from == x.point) l.copy(to = centre.id, bend = 0f) else l.copy(from = centre.id, bend = 0f))
         }
-        val tree = Amplitude.build(Diagram(points, lines), RuleContext(ctx.conv, ctx.massOf, ctx.ckmIdentity, IndexNames(), ctx.theory, ctx.gauge))
+        val tree = Amplitude.build(Diagram(points, lines), ctx.copy(names = IndexNames()))
         if (!tree.ok || tree.terms.size != 1) return null
         val e = reduceChains(contract(tree.terms[0].expr), tree.chains.map { it.left to it.right })
         return tree to Kinematics(tree.externals, ctx.massOf).apply(e)

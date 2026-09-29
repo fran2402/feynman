@@ -36,7 +36,7 @@ import com.example.feynman.physics.Particle
 /** A particle's card, from a long press on its key. */
 @Composable
 fun ParticleHelpDialog(p: Particle, onDismiss: () -> Unit) {
-    val card = remember(p) { Help.particle(p) }
+    val card = remember(p, AppSettings.theory) { Help.particle(p, AppSettings.theory) }
     HelpDialog(card, onDismiss)
 }
 

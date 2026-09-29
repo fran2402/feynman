@@ -14,6 +14,8 @@ data class CIdx(val id: Int, val adjoint: Boolean, val hint: String) {
         private val next = java.util.concurrent.atomic.AtomicInteger(-1)
         /** A summed index made inside a rule (the e of the four-gluon vertex). */
         fun internal(hint: String) = CIdx(next.getAndDecrement(), true, hint)
+        /** A summed quark color made inside a rule (T^aT^b in a squark seagull). */
+        fun internalTriplet(hint: String) = CIdx(next.getAndDecrement(), false, hint)
     }
 }
 
@@ -45,7 +47,20 @@ class Leg(val particle: Particle, val anti: Boolean, val index: Idx, val k: Mom,
 }
 
 /** A rule found for a vertex or line: the paper's equation number, the factor and how it's written. */
-class RuleUse(val eq: Int, val terms: List<VertexTerm>, val tex: String, /** For rules not from the paper (φ⁴, 2HDM, Z′). */ val label: String? = null) {
+class RuleUse(
+    val eq: Int,
+    val terms: List<VertexTerm>,
+    val tex: String,
+    /** For rules not from the paper (φ⁴, 2HDM, Z′, supersymmetry). */
+    val label: String? = null,
+    /**
+     * For a vertex with two fermions: the legs (by position in the list given to [Rules.vertex])
+     * read on the left and on the right of Γ, as in ψ̄_left Γ ψ_right. Null means the Dirac
+     * fermion leaving the vertex is on the left, the usual reading.
+     */
+    val left: Int? = null,
+    val right: Int? = null,
+) {
     /** "(67)" for the paper's rules, or the model's name for others. */
     val tag: String get() = label ?: "($eq)"
 }
@@ -60,8 +75,13 @@ class RuleContext(
     val names: IndexNames = IndexNames(),
     val theory: Theory = Theory.SM,
     val gauge: Gauge = Gauge.Feynman,
+    /** Symbols put in as numbers (by name). */
+    val numbers: Map<String, Double> = emptyMap(),
 ) {
-    fun copy(massOf: (Particle) -> Sym? = this.massOf) = RuleContext(conv, massOf, ckmIdentity, names, theory, gauge)
+    fun copy(massOf: (Particle) -> Sym? = this.massOf, names: IndexNames = this.names) = RuleContext(conv, massOf, ckmIdentity, names, theory, gauge, numbers)
+
+    /** A symbol, or its number (to 6 decimals) when it's to be put in as one. */
+    fun value(s: Sym): Expr = numbers[s.name]?.let { Expr.const(Rational.of(Math.round(it * 1e6), 1_000_000)) } ?: sym(s)
 
     /** ξ as an expression: 1, 0, the symbol ξ (or 1 in the unitary gauge, where Goldstones and ghosts are absent). */
     val xi: Expr get() = when (gauge) {
@@ -160,6 +180,10 @@ object Rules {
             Theory.Phi4 -> Models.phi4(legs)
             Theory.TwoHDM -> Models.twoHdm(legs, ctx)
             Theory.ZPrime -> if (legs.any { it.particle === BSM.zPrime }) Models.zPrime(legs, ctx) else smVertex(legs, ctx)
+            Theory.WZ -> SUSY.vertex(legs, ctx)
+            Theory.SQED -> SUSY.vertex(legs, ctx) ?: smVertex(legs, ctx)?.takeIf { it.eq == 67 }
+            Theory.SQCD -> SUSY.vertex(legs, ctx) ?: smVertex(legs, ctx)?.takeIf { it.eq in 47..50 }
+            Theory.MSSM -> SUSY.vertex(legs, ctx) ?: Models.twoHdm(legs, ctx)
         }
     }
 
@@ -411,8 +435,13 @@ object Rules {
                     val a = c.abs()
                     "$sign ${if (a == Rational.ONE) "" else Tex.rational(a)}${Tex.slashTex(e.key)}".trim()
                 } + (if (m == null) "" else " + ${m.tex}")
+                val label = when {
+                    !p.oriented -> "Majorana propagator"
+                    p in SUSY.all -> "chargino propagator"
+                    else -> null
+                }
                 RuleUse(54, listOf(VertexTerm(emptyList(), num * den * Expr.I)),
-                    "\\frac{i\\left($numTex\\right)}{${denTex(den)}}")
+                    "\\frac{i\\left($numTex\\right)}{${denTex(den)}}", label)
             }
             Spin.Vector -> {
                 val mass = if (p === SM.photon || p === SM.gluon) null else p.mass
@@ -453,7 +482,12 @@ object Rules {
                 val m2Tex = p.mass?.let { if (goldstone && ctx.gauge == Gauge.General) "\\xi ${it.tex}^{2}" else "${it.tex}^{2}" }
                 val den = propagatorDen(q, m2, m2Tex)
                 val eq = when (p) { SM.higgs -> 55; SM.phiZ -> 56; SM.phi -> 57; else -> 55 }
-                val label = when (p) { BSM.phi4 -> "φ propagator"; BSM.heavyH, BSM.pseudoA, BSM.chargedH -> "2HDM scalar"; else -> null }
+                val label = when {
+                    p === BSM.phi4 || p === SUSY.phiWZ -> "φ propagator"
+                    p === BSM.heavyH || p === BSM.pseudoA || p === BSM.chargedH -> "2HDM scalar"
+                    SUSY.sf(p) != null -> "sfermion propagator"
+                    else -> null
+                }
                 RuleUse(eq, listOf(VertexTerm(emptyList(), den * Expr.I)), "\\frac{i}{${denTex(den)}}", label)
             }
             Spin.Ghost -> {

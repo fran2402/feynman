@@ -24,7 +24,7 @@ object Evaluate {
         // 2HDM benchmark: tan β = 2, cos(β − α) = 0.1.
         val beta = atan(2.0)
         val alpha2 = beta - kotlin.math.acos(0.1)
-        mapOf(
+        val base = mapOf(
             "e" to e, "g" to e / sW, "gs" to sqrt(4 * PI * 0.1180), "cW" to cW, "sW" to sW,
             "mW" to mW, "mZ" to mZ, "mh" to 125.20,
             "m_e" to 0.000510999, "m_mu" to 0.105658, "m_tau" to 1.77693,
@@ -36,8 +36,12 @@ object Evaluate {
             "m_phi" to 1.0, "lambda" to 0.1, "kappa" to 1.0,
             "mH" to 600.0, "mA" to 600.0, "mHp" to 620.0, "mZp" to 3000.0, "gZp" to e / sW,
             "calpha" to cos(alpha2), "salpha" to sin(alpha2), "cbeta" to cos(beta), "sbeta" to sin(beta),
-        )
+        ) + SUSY.defaults
+        base + SUSY.derive(base)
     }
+
+    /** Typed values with the mixing matrices and ino masses worked out from them. */
+    fun withDerived(values: Map<String, Double>): Map<String, Double> = values + SUSY.derive(values)
 
     /** Total widths (GeV) for Breit–Wigner propagators, by mass symbol. */
     val widths: Map<String, Double> = mapOf(

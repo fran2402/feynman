@@ -29,7 +29,6 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesomeMosaic
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -51,6 +50,8 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.widthIn
+import com.example.feynman.physics.SUSY
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -165,8 +166,6 @@ private fun DiagramTabs(vm: FeynmanViewModel) {
             Icon(Icons.Default.Add, contentDescription = "New diagram", modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(4.dp))
-        // Tidy: lines up the ends, spaces the vertices, straightens lines; nothing is removed.
-        IconButton(onClick = vm::tidy, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy the diagram", tint = inkVariant()) }
         IconButton(onClick = vm::recenter, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.CenterFocusStrong, contentDescription = "Bring the diagram into view", tint = inkVariant()) }
         IconButton(onClick = vm::clear, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.DeleteSweep, contentDescription = "Clear this diagram", tint = inkVariant()) }
     }
@@ -209,7 +208,9 @@ private fun Palette(vm: FeynmanViewModel) {
     help?.let { p -> ParticleHelpDialog(p, onDismiss = { help = null }) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Connected button group.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        // With many groups (the MSSM's) the row scrolls sideways.
+        val many = groups.size > 5
+        Row(Modifier.fillMaxWidth().then(if (many) Modifier.horizontalScroll(rememberScrollState()) else Modifier), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             groups.forEachIndexed { i, g ->
                 val on = g == group
                 val outer = 20.dp; val inner = 6.dp
@@ -220,10 +221,11 @@ private fun Palette(vm: FeynmanViewModel) {
                     else -> RoundedCornerShape(inner)
                 }
                 Box(
-                    Modifier.weight(1f).height(40.dp).clip(shape).background(if (on) colors.primary else colors.surfaceContainerHigh).clickable { chosen = g },
+                    (if (many) Modifier.widthIn(min = 64.dp) else Modifier.weight(1f)).height(40.dp).clip(shape).background(if (on) colors.primary else colors.surfaceContainerHigh).clickable { chosen = g },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(g.substringBefore(' ').let { if (it == "Gauge") "Bosons" else it }, style = MaterialTheme.typography.labelMedium, color = if (on) colors.onPrimary else ink(), maxLines = 1)
+                    Text(SUSY.groupLabel(g), style = MaterialTheme.typography.labelMedium, color = if (on) colors.onPrimary else ink(), maxLines = 1,
+                        modifier = if (many) Modifier.padding(horizontal = 12.dp) else Modifier)
                 }
             }
         }

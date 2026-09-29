@@ -27,7 +27,8 @@ object Observables {
         else -> Kind.None
     }
 
-    private fun mass(kin: Kinematics, x: External, values: Map<String, Double>) = kin.mass(x)?.let { values[it.name] } ?: 0.0
+    // Physical masses: a neutralino's may be negative in the mass matrix's convention.
+    private fun mass(kin: Kinematics, x: External, values: Map<String, Double>) = kin.mass(x)?.let { values[it.name] }?.let { kotlin.math.abs(it) } ?: 0.0
 
     /** Källén's λ(a, b, c) = a² + b² + c² − 2ab − 2bc − 2ca. */
     fun kallen(a: Double, b: Double, c: Double) = a * a + b * b + c * c - 2 * a * b - 2 * b * c - 2 * c * a

@@ -10,8 +10,21 @@ object RuleCatalog {
     /** [into]: for oriented particles, whether the particle flows into the vertex. */
     class RLeg(val particle: String, val into: Boolean, val label: String)
 
-    class Entry(val eq: Int, val section: String, val legs: List<RLeg>, val tex: String) {
+    class Entry(
+        val eq: Int,
+        val section: String,
+        val legs: List<RLeg>,
+        val tex: String,
+        /** For rules not from the paper: their name (the vertex's label in a solution). */
+        val label: String? = null,
+        /** Which fields the rule is about, when its legs only stand for a kind (f̃, χ̃⁰_i). */
+        val involves: ((Particle) -> Boolean)? = null,
+    ) {
         val isPropagator get() = legs.size == 2
+        /** A stable key: the equation number or the name. */
+        val key: String get() = label ?: eq.toString()
+        /** "(67)" for the paper's rules, the name for others. */
+        val tag: String get() = label ?: "($eq)"
     }
 
     private fun l(p: String, label: String, into: Boolean = true) = RLeg(p, into, label)
@@ -118,4 +131,30 @@ object RuleCatalog {
 
     /** The rule with this equation number. */
     fun byEq(eq: Int) = all.firstOrNull { it.eq == eq }
+
+    /** A model's rule by its name. */
+    fun byLabel(label: String): Entry? {
+        // Rules written together: χ̃χ̃h also gives H, A and φ_Z; χ̃⁰χ̃±H∓ also φ∓.
+        val key = when (label) {
+            "χ̃⁰χ̃⁰H", "χ̃⁰χ̃⁰A", "χ̃⁰χ̃⁰φ_Z" -> "χ̃⁰χ̃⁰h"
+            "χ̃⁺χ̃⁻H", "χ̃⁺χ̃⁻A", "χ̃⁺χ̃⁻φ_Z" -> "χ̃⁺χ̃⁻h"
+            "χ̃⁰χ̃±φ∓" -> "χ̃⁰χ̃±H∓"
+            "WZ cubic", "WZ quartic", "WZ Yukawa" -> label
+            else -> if (label.startsWith("2HDM (8")) "2HDM (82)" else if (label.startsWith("2HDM (7") && label !in listOf("2HDM (70)", "2HDM (71)", "2HDM (77)", "2HDM (78)", "2HDM (79)")) "2HDM (75)" else label
+        }
+        return ModelRules.all.firstOrNull { it.label == key }
+    }
+
+    /** The rules of a theory, in order: the paper's that apply, then the model's own. */
+    fun forTheory(t: Theory): List<Entry> {
+        val paper = when (t) {
+            Theory.SM, Theory.TwoHDM, Theory.ZPrime, Theory.MSSM -> all
+            Theory.QED, Theory.SQED -> all.filter { it.eq in listOf(51, 54, 67) }
+            Theory.QCD, Theory.SQCD -> all.filter { it.eq in 45..50 || it.eq == 54 }
+            Theory.Phi4, Theory.WZ -> emptyList()
+        }
+        return paper + ModelRules.of(t)
+    }
+
+    fun sectionsOf(list: List<Entry>) = list.map { it.section }.distinct()
 }

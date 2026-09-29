@@ -26,6 +26,11 @@ data class SolveOptions(
     val gauge: Gauge = Gauge.Feynman,
     /** Width of unstable bosons in the numbers (Breit–Wigner). */
     val widths: Boolean = true,
+    /**
+     * Values to put in as numbers instead of symbols: the MSSM's mixing matrices, which
+     * otherwise make |ℳ|² a very long polynomial in N, U and V.
+     */
+    val numbers: Map<String, Double> = emptyMap(),
 )
 
 class Solution(
@@ -41,10 +46,11 @@ class Solution(
 object Solver {
     fun context(o: SolveOptions) = RuleContext(
         o.conv,
-        massOf = { p -> if (o.masslessFermions && p.isFermion && p !== SM.top) null else p.mass },
+        massOf = { p -> if (o.masslessFermions && p.isFermion && p.family != null && p !== SM.top) null else p.mass },
         ckmIdentity = o.ckmIdentity,
         theory = o.theory,
         gauge = o.gauge,
+        numbers = o.numbers,
     )
 
     /** Pulls out the common factor of every term (symbols' lowest powers and the coefficients' gcd). */

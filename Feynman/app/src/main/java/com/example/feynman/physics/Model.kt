@@ -18,6 +18,8 @@ enum class LineStyle {
     Scalar,
     /** Dotted with an arrow: ghosts. */
     Ghost,
+    /** A solid line with a wave on it: photino and gluino (neutralinos and charginos are drawn solid). */
+    Gaugino,
 }
 
 enum class Spin { Fermion, Vector, Scalar, Ghost }
@@ -134,7 +136,7 @@ object SM {
     val groups: List<String> = all.map { it.group }.distinct()
 
     /** Any field, the Standard Model's or a model beyond it. */
-    fun byId(id: String): Particle? = all.firstOrNull { it.id == id } ?: BSM.all.firstOrNull { it.id == id }
+    fun byId(id: String): Particle? = all.firstOrNull { it.id == id } ?: BSM.all.firstOrNull { it.id == id } ?: SUSY.all.firstOrNull { it.id == id }
 
     val upQuarks get() = listOf(up, charm, top)
     val downQuarks get() = listOf(down, strange, bottom)
@@ -175,7 +177,14 @@ enum class Theory(val label: String, val about: String) {
     Phi4("Scalar φ⁴ (and φ³)", "One real scalar with −iλ at four lines and −iκ at three: the textbook toy theory."),
     TwoHDM("Two Higgs doublets (type II)", "The Standard Model with H, A and H±: couplings scaled by α and β (Gunion–Haber conventions); the extra scalars' self-couplings aren't included."),
     ZPrime("Standard Model + Z′", "A heavy Z′ with the Z's couplings to fermions times g_{Z′}/g (a sequential Z′)."),
+    WZ("Wess–Zumino model", "A chiral supermultiplet: a complex scalar φ and a Majorana fermion ψ with the same mass, W = mΦ²/2 + yΦ³/6."),
+    SQED("Supersymmetric QED", "Electrons and muons, their scalar partners ẽ_L, ẽ_R, μ̃_L, μ̃_R, the photon and the Majorana photino."),
+    SQCD("Supersymmetric QCD", "QCD with squarks q̃_L, q̃_R and the Majorana gluino."),
+    MSSM("MSSM", "The minimal supersymmetric Standard Model: sfermions (no left–right mixing), neutralinos, charginos, the gluino and the type-II Higgs sector h, H, A, H±."),
     ;
+
+    /** Whether the theory is supersymmetric (Majorana fermions, superpartners). */
+    val supersymmetric get() = this == WZ || this == SQED || this == SQCD || this == MSSM
 
     /** The fields on the palette. */
     val particles: List<Particle> get() = when (this) {
@@ -185,6 +194,10 @@ enum class Theory(val label: String, val about: String) {
         Phi4 -> listOf(BSM.phi4)
         TwoHDM -> F.all.let { it.take(it.indexOf(F.phi) + 1) + listOf(BSM.heavyH, BSM.pseudoA, BSM.chargedH) + it.drop(it.indexOf(F.phi) + 1) }
         ZPrime -> F.all.let { it.take(it.indexOf(F.gluon) + 1) + BSM.zPrime + it.drop(it.indexOf(F.gluon) + 1) }
+        WZ -> listOf(SUSY.phiWZ, SUSY.psiWZ)
+        SQED -> listOf(F.electron, F.muon, F.photon) + SUSY.sleptons.filter { it.family == Family.ChargedLepton && it.generation < 3 } + SUSY.photino
+        SQCD -> QCD.particles + SUSY.squarksL + SUSY.squarksR + SUSY.gluino
+        MSSM -> TwoHDM.particles + SUSY.sleptons + SUSY.sneutrinos + SUSY.squarksL + SUSY.squarksR + SUSY.neutralinos + SUSY.charginos + SUSY.gluino
     }
 
     fun allows(p: Particle) = p in particles

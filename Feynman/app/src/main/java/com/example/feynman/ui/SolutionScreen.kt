@@ -148,7 +148,7 @@ private fun NumbersCard(vm: FeynmanViewModel, s: Solution) {
                 Box(Modifier.width(64.dp)) { MathTex(tex, fontSize = 17.sp, wrap = false) }
                 OutlinedTextField(
                     value = if (name == "mu") vm.mu else vm.values[name] ?: "",
-                    onValueChange = { v -> if (name == "mu") vm.mu = v else vm.values[name] = v },
+                    onValueChange = { v -> if (name == "mu") vm.mu = v else vm.setValue(name, v) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(1f),

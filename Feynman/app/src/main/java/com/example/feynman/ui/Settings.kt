@@ -128,6 +128,8 @@ fun AppSettingsPage(vm: FeynmanViewModel, onBack: () -> Unit, onAcknowledgements
         SettingsToggle("Massless fermions", "Neglect every fermion mass except the top quark's (the high-energy limit)", AppSettings.masslessFermions) { AppSettings.changeMasslessFermions(it); changed() }
         SettingsToggle("CKM matrix = 1", "Quarks couple to the W only within a generation", AppSettings.ckmIdentity) { AppSettings.changeCkmIdentity(it); changed() }
         SettingsToggle("Widths in propagators", "Breit–Wigner for Z, W, h, t (and new particles) in cross sections and widths", AppSettings.widths) { AppSettings.changeWidths(it); changed() }
+        if (AppSettings.theory == Theory.MSSM)
+            SettingsToggle("Mixing matrices as numbers", "N, U and V from M₁, M₂, μ and tan β put in as decimals: much shorter (and faster) answers than with the symbols", AppSettings.numericMixing) { AppSettings.changeNumericMixing(it); changed() }
 
         SettingsSection("Drawing")
         SettingsToggle("Gluons as coils", "Most textbooks; off draws the paper's tight wave", AppSettings.gluonCoils, AppSettings::changeGluonCoils)

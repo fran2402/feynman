@@ -343,3 +343,14 @@ fun normalOrder(s: List<G>, order: (G) -> String): List<Pair<Expr, List<G>>> {
     rec(s, Expr.ONE)
     return out.entries.filter { !it.value.isZero }.map { it.value to it.key }
 }
+
+/**
+ * Γ' = CΓᵀC⁻¹ on each term's (single) Dirac string: the vertex read the other way along the
+ * fermion flow (Denner et al., Nucl. Phys. B 387 (1992) 467). The string is reversed and every
+ * γ^μ and p̸ changes sign; γ5 (so P_L, P_R and 1) stays.
+ */
+fun reverseDirac(e: Expr): Expr = e.mapTerms { k, c ->
+    var sign = 1L
+    val chains = k.chains.map { ch -> ch.reversed().also { r -> r.forEach { if (it !is G.Five) sign = -sign } } }
+    Expr(mapOf(TermKey(k.mono, chains) to c * CQ.of(sign)))
+}

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,25 +36,34 @@ import com.example.feynman.physics.SM
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Every rule of the paper, drawn and written out, by section. */
+/** The rules of the chosen theory, drawn and written out, by section. */
 @Composable
 fun RulesScreen() {
     val colors = MaterialTheme.colorScheme
     val c = AppSettings.conventions
+    val theory = AppSettings.theory
+    val entries = remember(theory) { RuleCatalog.forTheory(theory) }
+    val usesPaper = entries.any { it.label == null }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(colors.secondaryContainer).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Romão & Silva, Int. J. Mod. Phys. A 27 (2012) 1230025", style = MaterialTheme.typography.titleSmall, color = colors.onSecondaryContainer)
-                Text("All Standard Model rules in an Rξ gauge, with the signs η that differ between books left in. Metric (+, −, −, −); all momenta incoming, except in ghost vertices, where p is the outgoing ghost's.",
+                Text(theory.label, style = MaterialTheme.typography.titleSmall, color = colors.onSecondaryContainer)
+                Text(theory.about + " Only this theory's rules are listed; pick another in Settings → Theory.",
                     style = MaterialTheme.typography.bodySmall, color = colors.onSecondaryContainer)
-                MathTex("\\eta = ${s(c.eta)},\\ \\eta' = ${s(c.etaPrime)},\\ \\eta_Z = ${s(c.etaZ)},\\ \\eta_\\theta = ${s(c.etaTheta)},\\ \\eta_Y = ${s(c.etaY)},\\ \\eta_e = ${s(c.etaE)},\\ \\eta_s = ${s(c.etaS)},\\ \\eta_G = ${s(c.etaG)}",
-                    Modifier.fillMaxWidth(), fontSize = 16.sp, color = colors.onSecondaryContainer)
-                Text("Your signs: ${ConventionPresets.nameOf(c)} (change them in Settings). Calculations use them with ξ = 1.", style = MaterialTheme.typography.bodySmall, color = colors.onSecondaryContainer)
+                if (usesPaper) {
+                    Text("Rules with a number are Romão & Silva's, Int. J. Mod. Phys. A 27 (2012) 1230025, in an Rξ gauge with the signs η left in. Metric (+, −, −, −); all momenta incoming, except in ghost vertices, where p is the outgoing ghost's.",
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSecondaryContainer)
+                    MathTex("\\eta = ${s(c.eta)},\\ \\eta' = ${s(c.etaPrime)},\\ \\eta_Z = ${s(c.etaZ)},\\ \\eta_\\theta = ${s(c.etaTheta)},\\ \\eta_Y = ${s(c.etaY)},\\ \\eta_e = ${s(c.etaE)},\\ \\eta_s = ${s(c.etaS)},\\ \\eta_G = ${s(c.etaG)}",
+                        Modifier.fillMaxWidth(), fontSize = 16.sp, color = colors.onSecondaryContainer)
+                    Text("Your signs: ${ConventionPresets.nameOf(c)} (change them in Settings). Calculations use them in the ${AppSettings.gauge.label} gauge.", style = MaterialTheme.typography.bodySmall, color = colors.onSecondaryContainer)
+                }
+                if (theory.supersymmetric) Text("Superpartners' gauge couplings follow the same covariant derivative and signs; gaugino and higgsino couplings are Martin's (hep-ph/9709356). Majorana lines have no arrow: a fermion line is read along a chosen fermion flow, and a vertex read the other way uses Γ′ = CΓᵀC⁻¹ (Denner et al., Nucl. Phys. B 387 (1992) 467).",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSecondaryContainer)
             }
         }
-        for (section in RuleCatalog.sections) {
-            item(key = section) { Text(section, style = MaterialTheme.typography.titleMedium, color = colors.primary, modifier = Modifier.padding(top = 8.dp, start = 4.dp)) }
-            items(RuleCatalog.all.filter { it.section == section }, key = { it.eq }) { e -> RuleCard(e) }
+        for (section in RuleCatalog.sectionsOf(entries)) {
+            item(key = "section:$section") { Text(section, style = MaterialTheme.typography.titleMedium, color = colors.primary, modifier = Modifier.padding(top = 8.dp, start = 4.dp)) }
+            items(entries.filter { it.section == section }, key = { "${section}:${it.key}" }) { e -> RuleCard(e) }
         }
         item { Box(Modifier.height(24.dp)) }
     }
@@ -71,7 +81,7 @@ private fun RuleCard(e: RuleCatalog.Entry) {
     ) {
         RuleDrawing(e, Modifier.width(if (e.isPropagator) 120.dp else 110.dp).height(if (e.isPropagator) 48.dp else 100.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("(${e.eq})", style = MaterialTheme.typography.labelMedium, color = colors.primary,
+            Text(e.tag, style = MaterialTheme.typography.labelMedium, color = colors.primary,
                 modifier = Modifier.clip(CircleShape).background(colors.primaryContainer).padding(horizontal = 10.dp, vertical = 3.dp))
             MathTex(e.tex, Modifier.fillMaxWidth(), fontSize = 16.sp)
         }

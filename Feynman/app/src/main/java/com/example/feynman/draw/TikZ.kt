@@ -1,6 +1,7 @@
 package com.example.feynman.draw
 
 import com.example.feynman.physics.Diagram
+import com.example.feynman.physics.ColorRep
 import com.example.feynman.physics.LineStyle
 import com.example.feynman.physics.SM
 import com.example.feynman.physics.Topology
@@ -27,7 +28,8 @@ object TikZ {
         for (l in d.lines) {
             val p = SM.byId(l.particle) ?: continue
             val style = when (p.style) {
-                LineStyle.Fermion -> "fermion"
+                LineStyle.Fermion -> if (p.oriented) "fermion" else "plain"
+                LineStyle.Gaugino -> if (p.color == ColorRep.Octet) "gluino" else "gaugino"
                 LineStyle.Boson -> if (p.oriented) "charged boson" else "boson"
                 LineStyle.Gluon -> "gluon"
                 LineStyle.Scalar -> if (p.oriented) "charged scalar" else "scalar"

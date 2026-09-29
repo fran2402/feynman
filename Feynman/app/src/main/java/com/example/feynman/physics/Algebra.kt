@@ -307,6 +307,26 @@ class Expr(val terms: Map<TermKey, CQ>) {
     }
 }
 
+/** Adds many expressions without copying the sum each time. */
+class ExprSum {
+    private val acc = HashMap<TermKey, CQ>()
+    fun add(e: Expr, factor: CQ = CQ.ONE) {
+        for ((k, c) in e.terms) {
+            val s = (acc[k] ?: CQ.ZERO) + c * factor
+            if (s.isZero) acc.remove(k) else acc[k] = s
+        }
+    }
+    /** Adds a × b, term by term. */
+    fun addProduct(a: Expr, b: Expr, factor: CQ = CQ.ONE) {
+        for ((k1, c1) in a.terms) for ((k2, c2) in b.terms) {
+            val k = TermKey(k1.mono * k2.mono, k1.chains + k2.chains)
+            val s = (acc[k] ?: CQ.ZERO) + c1 * c2 * factor
+            if (s.isZero) acc.remove(k) else acc[k] = s
+        }
+    }
+    fun toExpr() = Expr(HashMap(acc))
+}
+
 fun atom(a: Atom, n: Int = 1) = Expr(mapOf(TermKey(Mono.of(a, n), emptyList()) to CQ.ONE))
 fun sym(s: Sym, n: Int = 1) = atom(s, n)
 fun sum(list: Iterable<Expr>) = list.fold(Expr.ZERO) { a, b -> a + b }

@@ -1,5 +1,6 @@
 package com.example.feynman.draw
 
+import com.example.feynman.physics.ColorRep
 import com.example.feynman.physics.Diagram
 import com.example.feynman.physics.Line
 import com.example.feynman.physics.LineStyle
@@ -158,6 +159,11 @@ object Geometry {
                     strokes.add(seg)
                 }
             }
+            LineStyle.Gaugino -> {
+                strokes.add(sp)
+                val octet = p?.color == ColorRep.Octet
+                strokes.add(if (octet && style.gluonCoils) coils(w, style) else if (octet) wave(w, style.gluonAmplitude, style.gluonWavelength) else wave(w, style.amplitude, style.wavelength))
+            }
             LineStyle.Ghost -> {
                 val n = max(2, (len / style.dotSpacing).roundToInt())
                 for (i in 0..n) dots.add(w.at(len * i / n).first)
@@ -171,7 +177,7 @@ object Geometry {
             val tip = mid + dir * (s * 0.55f)
             val back = mid - dir * (s * 0.45f)
             val n = dir.perp
-            val onWave = lineStyle == LineStyle.Boson || lineStyle == LineStyle.Gluon
+            val onWave = lineStyle == LineStyle.Boson || lineStyle == LineStyle.Gluon || lineStyle == LineStyle.Gaugino
             // On a wave the arrow sits beside the line so it doesn't clash with it.
             val off = if (onWave) n * (-(style.amplitude + s * 0.7f) * labelSide) else Pt(0f, 0f)
             arrows.add(listOf(tip + off, back + n * (s * 0.42f) + off, back - n * (s * 0.42f) + off))
@@ -179,7 +185,7 @@ object Geometry {
         // The label sits beside the middle, on the side away from the momentum arrow.
         val (mid, dir) = w.at(len / 2)
         val side = if (selfLoop) (mid - a).normalized() else dir.perp * labelSide
-        val waveExtra = if (lineStyle == LineStyle.Boson || lineStyle == LineStyle.Gluon) style.amplitude else 0f
+        val waveExtra = if (lineStyle == LineStyle.Boson || lineStyle == LineStyle.Gluon || lineStyle == LineStyle.Gaugino) style.amplitude else 0f
         val labelAt = mid + side * (style.labelOffset + waveExtra)
         var mStroke: List<Pt>? = null
         var mHead: List<Pt>? = null

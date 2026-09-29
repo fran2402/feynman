@@ -51,13 +51,14 @@ object Generate {
     private fun legsOf(kinds: List<Kind>, ctx: RuleContext): Boolean {
         val pool = IndexPool()
         var colorId = 0
-        val legs = kinds.map { k ->
+        // Each leg gets its own momentum, so momentum-dependent vertices (φ⁺φ⁻γ, f̃f̃Z …) don't vanish.
+        val legs = kinds.mapIndexed { n, k ->
             val color = when (k.p.color) {
                 ColorRep.Triplet -> CIdx(100 + colorId++, false, "i")
                 ColorRep.Octet -> CIdx(100 + colorId++, true, "a")
                 ColorRep.None -> null
             }
-            com.example.feynman.physics.Leg(k.p, k.anti, pool.fresh(), emptyMap(), color)
+            com.example.feynman.physics.Leg(k.p, k.anti, pool.fresh(), mom("q$n"), color)
         }
         return Rules.vertex(legs, ctx)?.terms?.any { !it.expr.isZero } == true
     }

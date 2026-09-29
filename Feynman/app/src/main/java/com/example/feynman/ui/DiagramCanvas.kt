@@ -185,7 +185,7 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
     var bending by remember { mutableStateOf<Line?>(null) }
     var preview by remember { mutableStateOf<Diagram?>(null) }
     val gridColor = colors.grid
-    /** Fits the whole diagram in the canvas (double tap, Tidy, and "bring into view"). */
+    /** Fits the whole diagram in the canvas (double tap and "bring into view"). */
     fun fit() {
         val d = vm.diagram
         if (d.points.isEmpty() || canvasSize == IntSize.Zero) { zoom = 1f; pan = Offset(40f, 60f); return }

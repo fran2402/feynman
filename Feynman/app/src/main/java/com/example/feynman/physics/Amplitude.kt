@@ -95,24 +95,34 @@ class Amplitude(
             // Vertex factors.
             val vertexRule = HashMap<Int, RuleUse>()
             val fermionVertex = HashSet<Int>()
+            // At each fermion vertex, its canonical (left, right) fermion ends: (line id, at the line's start?).
+            val canonical = HashMap<Int, Pair<Pair<Int, Boolean>, Pair<Int, Boolean>>>()
             val rules = ArrayList<Pair<String, RuleUse>>()
             for (v in topo.vertices) {
                 val legs = ArrayList<Leg>()
+                val ends = ArrayList<Pair<Int, Boolean>>()
                 for (l in d.linesAt(v)) {
                     val p = particle[l.id] ?: continue
                     val q = topo.momenta[l.id] ?: emptyMap()
-                    if (l.to == v) legs.add(Leg(p, false, idx(l, false), q, colors[l.id]))
-                    if (l.from == v) legs.add(Leg(p, true, idx(l, true), -q, colors[l.id]))
+                    if (l.to == v) { legs.add(Leg(p, false, idx(l, false), q, colors[l.id])); ends.add(l.id to false) }
+                    if (l.from == v) { legs.add(Leg(p, true, idx(l, true), -q, colors[l.id])); ends.add(l.id to true) }
                 }
                 if (legs.size < 3) continue
                 val r = Rules.vertex(legs, ctx)
                 if (r == null) {
                     val what = legs.joinToString(" ") { if (it.particle.oriented && it.anti) it.particle.antiTex else it.particle.tex }
-                    issues.add(Issue("No Standard Model vertex joins \\(${what}\\)", point = v))
+                    issues.add(Issue("No ${ctx.theory.label} vertex joins \\(${what}\\)", point = v))
                     continue
                 }
                 vertexRule[v] = r
-                if (legs.any { it.particle.isFermion }) fermionVertex.add(v)
+                val fl = legs.indices.filter { legs[it].particle.isFermion }
+                if (fl.size == 2) {
+                    fermionVertex.add(v)
+                    // Unless the rule says otherwise: ψ̄ (the line leaving) on the left, ψ on the right.
+                    val (li, ri) = if (r.left != null && r.right != null) r.left to r.right
+                        else if (legs[fl[0]].anti || !legs[fl[1]].anti) fl[0] to fl[1] else fl[1] to fl[0]
+                    canonical[v] = ends[li] to ends[ri]
+                }
                 rules.add(vertexName(legs) to r)
             }
             // Propagators.
@@ -124,7 +134,10 @@ class Amplitude(
                 rules.add("${if (p.oriented) p.tex else p.tex}\\text{ propagator}" to r)
             }
 
-            // Fermion lines, read against the arrows.
+            // Fermion lines (Denner's fermion flow): each line is read from one end to the other
+            // through the two fermion ends at every vertex. A Dirac line read along its arrow gets
+            // the reversed vertex Γ' = CΓᵀC⁻¹ and the propagator with the flow's momentum; spinors
+            // follow from in/out alone (ū or v̄ on the left, u or v on the right).
             val chains = ArrayList<Chain>()
             val chainFactors = ArrayList<List<AmpTerm>>()
             val chainTex = ArrayList<String>()
@@ -132,64 +145,113 @@ class Amplitude(
             val fermionLines = d.lines.filter { particle[it.id]?.isFermion == true }
             val extByPoint = topo.externals.associateBy { it.point }
             fun massExpr(p: Particle) = ctx.massOf(p)?.let { sym(it) } ?: Expr.ZERO
-            for (x in topo.externals.filter { it.particle.isFermion }) {
-                // Start where the flow leaves the diagram: an outgoing particle or incoming antiparticle.
-                if (x.line.to != x.point) continue
-                val left = Spinor(if (x.incoming) Spinor.Kind.VBar else Spinor.Kind.UBar, x.momentum, massExpr(x.particle))
+            /** The other fermion end at vertex [v] than (line, atStart). */
+            fun partner(v: Int, line: Int, atStart: Boolean): Pair<Line, Boolean>? {
+                for (l in fermionLines) {
+                    if (l.from == v && !(l.id == line && atStart)) return l to true
+                    if (l.to == v && !(l.id == line && !atStart)) return l to false
+                }
+                return null
+            }
+            /** A step of a path: the line, walked from its start (true) or from its end. */
+            class Step(val line: Line, val fromStart: Boolean) {
+                val enter get() = if (fromStart) line.from else line.to
+                val exit get() = if (fromStart) line.to else line.from
+                /** A Dirac line walked along its arrow is read reversed. */
+                val reversed get() = particle[line.id]!!.oriented && fromStart
+                fun flip() = Step(line, !fromStart)
+            }
+            fun walk(first: Step, closed: Boolean): List<Step>? {
+                val path = arrayListOf(first)
+                var cur = first
+                var guard = 0
+                while (guard++ < 200) {
+                    val v = cur.exit
+                    if (!closed && extByPoint[v] != null && d.degree(v) == 1) return path
+                    val (nl, atStart) = partner(v, cur.line.id, !cur.fromStart) ?: return null
+                    if (closed && nl.id == first.line.id && atStart == first.fromStart) return path
+                    cur = Step(nl, atStart)
+                    path.add(cur)
+                }
+                return null
+            }
+            fun read(path: List<Step>, closed: Boolean): Pair<List<AmpTerm>, String> {
                 var terms = listOf(AmpTerm(emptyList(), diracOne))
                 val tex = StringBuilder()
-                var line = x.line
-                var guard = 0
-                var end: External? = null
-                while (guard++ < 100) {
-                    onChain.add(line.id)
-                    val v = line.from
-                    val ext = extByPoint[v]
-                    if (ext != null && d.degree(v) == 1) { end = ext; break }
-                    val r = vertexRule[v]
-                    if (r != null) { terms = timesChain(terms, r.terms); tex.append(Tex.paren(r.tex).let { "\\left(${r.tex}\\right)" }).append(" ") }
-                    val next = fermionLines.firstOrNull { it.to == v && it.id != line.id && it.id !in onChain } ?: break
-                    val pr = propRule[next.id]
-                    if (pr != null) { terms = timesChain(terms, pr.terms); tex.append(pr.tex).append(" ") }
-                    line = next
+                fun vertexAt(v: Int, inStep: Step, outStep: Step) {
+                    val r = vertexRule[v] ?: return
+                    val here = (inStep.line.id to !inStep.fromStart) to (outStep.line.id to outStep.fromStart)
+                    val same = canonical[v] == here
+                    val t = if (same) r.terms else r.terms.map { VertexTerm(it.color, reverseDirac(it.expr)) }
+                    terms = timesChain(terms, t)
+                    tex.append("\\left(").append(if (same) r.tex else reversedTex(r, t, names)).append("\\right) ")
                 }
-                if (end == null) { issues.add(Issue("A fermion line doesn't reach an external end", line = x.line.id)); continue }
-                val right = Spinor(if (end.incoming) Spinor.Kind.U else Spinor.Kind.V, end.momentum, massExpr(end.particle))
-                chains.add(Chain(left, right, x, end))
+                for ((i, st) in path.withIndex()) {
+                    if (i > 0 || closed) {
+                        val prev = if (i > 0) path[i - 1] else path.last()
+                        vertexAt(st.enter, prev, st)
+                    }
+                    if (st.line in topo.internal) {
+                        val p = particle[st.line.id]!!
+                        // The flow runs against the reading: from exit to enter.
+                        val q = topo.momenta[st.line.id] ?: emptyMap()
+                        val flow = if (st.line.to == st.enter && st.line.from == st.exit && !st.line.isSelfLoop) q else if (st.line.isSelfLoop) q else -q
+                        val pr = Rules.propagator(p, flow, idx(st.line, true), idx(st.line, false), ctx)
+                        terms = timesChain(terms, pr.terms)
+                        tex.append(pr.tex).append(" ")
+                    }
+                }
+                return terms to tex.toString().trim()
+            }
+            for (x in topo.externals.filter { it.particle.isFermion }) {
+                if (x.line.id in onChain) continue
+                val path0 = walk(Step(x.line, x.line.from == x.point), false)
+                if (path0 == null) { issues.add(Issue("A fermion line doesn't reach an external end", line = x.line.id)); onChain.add(x.line.id); continue }
+                val end0 = extByPoint[path0.last().exit]!!
+                // Read it the way with fewer reversed Dirac lines (then from the lower leg number).
+                val back = path0.reversed().map { it.flip() }
+                val r0 = path0.count { it.reversed }; val r1 = back.count { it.reversed }
+                val path = if (r1 < r0 || (r1 == r0 && end0.number < x.number)) back else path0
+                path.forEach { onChain.add(it.line.id) }
+                val leftX = extByPoint[path.first().enter]!!
+                val rightX = extByPoint[path.last().exit]!!
+                val left = Spinor(if (leftX.incoming) Spinor.Kind.VBar else Spinor.Kind.UBar, leftX.momentum, massExpr(leftX.particle))
+                val right = Spinor(if (rightX.incoming) Spinor.Kind.U else Spinor.Kind.V, rightX.momentum, massExpr(rightX.particle))
+                val (terms, tex) = read(path, false)
+                chains.add(Chain(left, right, leftX, rightX))
                 chainFactors.add(terms)
-                chainTex.add("${spinorTex(left)}\\, ${tex.toString().trim()}\\, ${spinorTex(right)}")
+                chainTex.add("${spinorTex(left)}\\, $tex\\, ${spinorTex(right)}")
             }
             // Closed loops of fermions and of ghosts.
             var loopSign = 1
             val traceFactors = ArrayList<List<AmpTerm>>()
             val traceTex = ArrayList<String>()
             val scalarLoopTex = ArrayList<String>()
-            val ghostLines = d.lines.filter { particle[it.id]?.isGhost == true && it.from in topo.vertices && it.to in topo.vertices }
-            for (start in fermionLines + ghostLines) {
+            for (start in fermionLines) {
                 if (start.id in onChain) continue
                 if (start.from !in topo.vertices || start.to !in topo.vertices) continue
-                val isGhost = particle[start.id]!!.isGhost
-                val flowLines = if (isGhost) ghostLines else fermionLines
-                var terms = listOf(AmpTerm(emptyList(), diracOne))
-                val tex = StringBuilder()
+                // Against the arrow for Dirac lines.
+                val path = walk(Step(start, false), true) ?: continue
+                val use = if (path.count { it.reversed } > path.size / 2) path.reversed().map { it.flip() } else path
+                use.forEach { onChain.add(it.line.id) }
+                val (terms, tex) = read(use, true)
+                loopSign = -loopSign
+                traceFactors.add(terms.map { t -> AmpTerm(t.color, t.expr.mapTerms { k, c -> (trace(k.chains.firstOrNull() ?: emptyList()) * Expr(mapOf(TermKey(k.mono, emptyList()) to c))) }) })
+                traceTex.add("(-1)\\,\\mathrm{Tr}\\left[$tex\\right]")
+            }
+            val ghostLines = d.lines.filter { particle[it.id]?.isGhost == true && it.from in topo.vertices && it.to in topo.vertices }
+            for (start in ghostLines) {
+                if (start.id in onChain) continue
                 var line = start
                 var guard = 0
                 do {
                     onChain.add(line.id)
-                    val pr = propRule[line.id]
-                    if (pr != null && !isGhost) { terms = timesChain(terms, pr.terms); tex.append(pr.tex).append(" ") }
                     val v = line.from
-                    val r = vertexRule[v]
-                    if (r != null && !isGhost) { terms = timesChain(terms, r.terms); tex.append("\\left(${r.tex}\\right) ") }
-                    val next = flowLines.firstOrNull { it.to == v && (it.id !in onChain || it.id == start.id) } ?: break
+                    val next = ghostLines.firstOrNull { it.to == v && (it.id !in onChain || it.id == start.id) } ?: break
                     line = next
                 } while (line.id != start.id && guard++ < 100)
                 loopSign = -loopSign
-                if (isGhost) scalarLoopTex.add("(-1)")
-                else {
-                    traceFactors.add(terms.map { t -> AmpTerm(t.color, t.expr.mapTerms { k, c -> (trace(k.chains.firstOrNull() ?: emptyList()) * Expr(mapOf(TermKey(k.mono, emptyList()) to c))) }) })
-                    traceTex.add("(-1)\\,\\mathrm{Tr}\\left[${tex.toString().trim()}\\right]")
-                }
+                scalarLoopTex.add("(-1)")
             }
 
             // Everything else: vertices off fermion lines, boson (and ghost) propagators, polarizations.
@@ -241,6 +303,16 @@ class Amplitude(
             val tex = if (texParts.isEmpty()) "1" else texParts.joinToString("\\, ")
 
             return Amplitude(topo, ctx, all, chains, rules, tex, symmetry, loopSign, fermionSign, issues, loopLines, colors, lorentz, vertexRule)
+        }
+
+        /** How a reversed vertex Γ' = CΓᵀC⁻¹ is written. */
+        private fun reversedTex(r: RuleUse, t: List<VertexTerm>, names: IndexNames): String {
+            val orig = r.terms.map { it.expr }
+            val rev = t.map { it.expr }
+            if (orig == rev) return r.tex
+            if (orig.zip(rev).all { (a, b) -> a == -b }) return "-\\left(${r.tex}\\right)"
+            val color = t.firstOrNull()?.color?.joinToString(" ") { it.tex() } ?: ""
+            return (if (color.isEmpty()) "" else "$color\\,") + t.joinToString(" + ") { Tex.of(Rules.simplifyRoots(it.expr), names) }
         }
 
         private fun vertexName(legs: List<Leg>) =

@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.feynman.physics.SUSY
+import com.example.feynman.physics.Theory
 import com.example.feynman.physics.Diagram
 import com.example.feynman.physics.Editing
 import com.example.feynman.physics.Evaluate
@@ -141,12 +143,6 @@ class FeynmanViewModel(app: Application) : AndroidViewModel(app) {
     var viewVersion by mutableStateOf(0)
         private set
 
-    /** Tidies the drawing (undoable) and brings it into view. */
-    fun tidy() {
-        edit { Editing.tidy(it) }
-        viewVersion++
-    }
-
     fun recenter() { viewVersion++ }
 
     // --- Generating every diagram of a process ----------------------------------------------
@@ -187,7 +183,9 @@ class FeynmanViewModel(app: Application) : AndroidViewModel(app) {
         job?.cancel()
         val d = diagram
         val others = if (sumDiagrams) diagrams.filterIndexed { i, _ -> i != current } else emptyList()
-        val options = AppSettings.solveOptions
+        val options = AppSettings.solveOptions.let { o ->
+            if (o.theory == Theory.MSSM && AppSettings.numericMixing) o.copy(numbers = SUSY.derive(numericValues())) else o
+        }
         solving = true
         job = viewModelScope.launch {
             delay(150)
@@ -197,7 +195,13 @@ class FeynmanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun numericValues(): Map<String, Double> = values.mapNotNull { (k, v) -> v.replace("−", "-").trim().toDoubleOrNull()?.let { k to it } }.toMap()
+    /** A typed value changed: with the mixing matrices as numbers, M₁, M₂, μ and tan β change the answer. */
+    fun setValue(name: String, v: String) {
+        values[name] = v
+        if (AppSettings.theory == Theory.MSSM && AppSettings.numericMixing && SUSY.inputs.any { it.name == name }) resolve()
+    }
+
+    fun numericValues(): Map<String, Double> = Evaluate.withDerived(values.mapNotNull { (k, v) -> v.replace("−", "-").trim().toDoubleOrNull()?.let { k to it } }.toMap())
 
     // --- Projects ----------------------------------------------------------------------------
 
