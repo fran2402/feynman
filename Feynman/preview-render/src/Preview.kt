@@ -70,7 +70,20 @@ fun main(args: Array<String>) {
     val ink = Color(0x1C, 0x1C, 0x16)
     val accent = Color(0x5B, 0x61, 0x33)
     val scale = 2f
-    for ((ti, t) in Templates.all.withIndex()) {
+    // With "tidy" as the second argument: each template scrambled, then tidied.
+    val list = if (args.getOrNull(1) != "tidy") Templates.all else Templates.all.flatMap { t ->
+        val r = java.util.Random(3)
+        val ext = com.example.feynman.physics.Topology.of(t.diagram).externals.associate { it.point to it.incoming }
+        val messy = t.diagram.copy(points = t.diagram.points.map { p ->
+            p.copy(x = p.x + r.nextInt(160) - 80, y = p.y + r.nextInt(160) - 80,
+                io = ext[p.id]?.let { if (it) com.example.feynman.physics.Io.In else com.example.feynman.physics.Io.Out } ?: p.io)
+        })
+        listOf(
+            Templates.Template(t.name + " (messy)", t.group, com.example.feynman.physics.Editing.normalized(messy), t.about),
+            Templates.Template(t.name + " (tidied)", t.group, com.example.feynman.physics.Editing.normalized(com.example.feynman.physics.Editing.tidy(messy)), t.about),
+        )
+    }
+    for ((ti, t) in list.withIndex()) {
         val sol = Solver.solve(t.diagram, SolveOptions())
         val width = 1100
         val layout = MathLayout(fonts, 17f * scale)

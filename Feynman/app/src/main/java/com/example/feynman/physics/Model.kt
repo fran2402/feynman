@@ -164,25 +164,65 @@ data class Conventions(
     }
 }
 
+/** A book or paper, linked by its ISBN, DOI or arXiv number. */
+data class Source(val title: String, val id: String, val url: String) {
+    companion object {
+        /** A book by ISBN-13 (the link finds it in WorldCat's library catalogue). */
+        fun isbn(title: String, isbn13: String) =
+            Source(title, "ISBN $isbn13", "https://www.worldcat.org/isbn/${isbn13.filter { it.isDigit() }}")
+        fun doi(title: String, doi: String) = Source(title, "doi:$doi", "https://doi.org/$doi")
+        fun arxiv(title: String, id: String) = Source(title, "arXiv:$id", "https://arxiv.org/abs/$id")
+        /** When the ISBN couldn't be confirmed: a catalogue search by title and author. */
+        fun search(title: String, query: String) =
+            Source(title, "search", "https://search.worldcat.org/search?q=" + java.net.URLEncoder.encode(query, "UTF-8"))
+    }
+}
+
 /** A book's or review's conventions, from the paper's Tables 2 and 3 (ηs = η, as the paper notes is usual). */
-data class ConventionPreset(val name: String, val refs: String, val conv: Conventions)
+data class ConventionPreset(val name: String, val sources: List<Source>, val conv: Conventions)
 
 object ConventionPresets {
     private fun c(eta: Int, etaP: Int, etaZ: Int, etaT: Int, etaY: Int, etaE: Int, etaG: Int) =
         Conventions(eta, etaP, etaZ, etaT, etaY, etaE, eta, etaG)
 
     val all = listOf(
-        ConventionPreset("Bailin & Love; Mandl & Shaw; Langacker", "Refs. 2, 4–6, 47", c(1, 1, 1, 1, 1, 1, 1)),
-        ConventionPreset("Pokorski", "Ref. 3", c(1, 1, 1, 1, 1, 1, -1)),
-        ConventionPreset("Quigg; Halzen & Martin; Aitchison & Hey; Griffiths", "Refs. 7–17", c(1, 1, 1, 1, 1, 1, 1)),
-        ConventionPreset("Peskin & Schroeder", "Ref. 18 (and 19)", c(-1, -1, 1, 1, 1, -1, 1)),
-        ConventionPreset("Cheng & Li", "Ref. 23", c(-1, -1, 1, 1, 1, -1, -1)),
-        ConventionPreset("Ryder; Okun; Nair; Zee; Djouadi", "Refs. 20–22, 24–31", c(-1, -1, 1, 1, 1, -1, 1)),
-        ConventionPreset("Branco, Lavoura & Silva", "Refs. 32, 33", c(-1, -1, 1, -1, 1, 1, 1)),
-        ConventionPreset("Itzykson & Zuber", "Ref. 34", c(-1, -1, -1, 1, 1, -1, 1)),
-        ConventionPreset("Barroso, Pulido & Romão; Nogueira", "Refs. 36, 37", c(-1, 1, 1, -1, -1, 1, 1)),
-        ConventionPreset("Romão, Advanced QFT", "Ref. 38", c(-1, 1, 1, -1, 1, 1, 1)),
-        ConventionPreset("Das", "Ref. 39", c(1, -1, 1, -1, 1, -1, 1)),
+        ConventionPreset("Bailin & Love; Mandl & Shaw; Langacker", listOf(
+            Source.search("Bailin & Love", "Introduction to Gauge Field Theory Bailin Love"),
+            Source.isbn("Mandl & Shaw", "978-0-471-49683-0"),
+            Source.isbn("Langacker", "978-1-4200-7906-7"),
+            Source.arxiv("Silva, lectures", "hep-ph/0410351"),
+        ), c(1, 1, 1, 1, 1, 1, 1)),
+        ConventionPreset("Pokorski", listOf(Source.isbn("Pokorski", "978-0-521-47816-8")), c(1, 1, 1, 1, 1, 1, -1)),
+        ConventionPreset("Quigg; Halzen & Martin; Aitchison & Hey; Griffiths", listOf(
+            Source.isbn("Quigg, 2nd ed.", "978-0-691-13548-9"),
+            Source.isbn("Halzen & Martin", "978-0-471-88741-6"),
+            Source.search("Aitchison & Hey", "Gauge Theories in Particle Physics Aitchison Hey"),
+            Source.isbn("Griffiths", "978-3-527-40601-2"),
+        ), c(1, 1, 1, 1, 1, 1, 1)),
+        ConventionPreset("Peskin & Schroeder", listOf(
+            Source.isbn("Peskin & Schroeder", "978-0-201-50397-5"),
+            Source.doi("Alvarez-Gaumé & Vazquez-Mozo", "10.1007/978-3-642-23728-7"),
+        ), c(-1, -1, 1, 1, 1, -1, 1)),
+        ConventionPreset("Cheng & Li", listOf(Source.isbn("Cheng & Li", "978-0-19-851961-4")), c(-1, -1, 1, 1, 1, -1, -1)),
+        ConventionPreset("Ryder; Okun; Nair; Zee; Djouadi", listOf(
+            Source.isbn("Ryder", "978-0-521-47814-4"),
+            Source.search("Okun", "Leptons and Quarks Okun"),
+            Source.isbn("Nair", "978-0-387-21386-6"),
+            Source.isbn("Zee", "978-0-691-14034-6"),
+            Source.arxiv("Djouadi I", "hep-ph/0503172"),
+            Source.arxiv("Djouadi II", "hep-ph/0503173"),
+            Source.doi("Aoki et al.", "10.1143/PTPS.73.1"),
+        ), c(-1, -1, 1, 1, 1, -1, 1)),
+        ConventionPreset("Branco, Lavoura & Silva", listOf(
+            Source.isbn("CP Violation", "978-0-19-850399-6"),
+            Source.arxiv("Grimus et al.", "0711.4022"),
+        ), c(-1, -1, 1, -1, 1, 1, 1)),
+        ConventionPreset("Itzykson & Zuber", listOf(Source.isbn("Itzykson & Zuber", "978-0-07-032071-0")), c(-1, -1, -1, 1, 1, -1, 1)),
+        ConventionPreset("Barroso, Pulido & Romão; Nogueira", listOf(
+            Source("Barroso, Pulido & Romão", "Nucl. Phys. B 267, 509", "https://inspirehep.net/search?p=find%20j%20Nucl.Phys.B%2C267%2C509"),
+        ), c(-1, 1, 1, -1, -1, 1, 1)),
+        ConventionPreset("Romão, Advanced QFT", listOf(Source("Romão, lecture notes", "PDF", "http://porthos.ist.utl.pt/ftp/textos/tca.pdf")), c(-1, 1, 1, -1, 1, 1, 1)),
+        ConventionPreset("Das", listOf(Source.search("Das", "Lectures on Quantum Field Theory Ashok Das")), c(1, -1, 1, -1, 1, -1, 1)),
     )
 
     fun nameOf(c: Conventions) = all.firstOrNull { it.conv == c }?.name ?: "Custom"

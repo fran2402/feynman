@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.example.feynman.draw.DiagramShapes
 import com.example.feynman.draw.Geometry
 import com.example.feynman.draw.LineShape
@@ -46,7 +49,17 @@ class DiagramColors(
 @Composable
 fun diagramColors(): DiagramColors {
     val c = MaterialTheme.colorScheme
-    return DiagramColors(c.onSurface, c.primary, c.onSurfaceVariant.copy(alpha = 0.8f), c.onSurface, c.tertiary, c.error, c.outlineVariant.copy(alpha = 0.5f))
+    val dark = isDark()
+    // Pure white lines and labels in dark mode, like the maths.
+    return DiagramColors(
+        line = ink(),
+        label = if (dark) Color.White else c.primary,
+        momentum = if (dark) Color.White.copy(alpha = 0.75f) else c.onSurfaceVariant.copy(alpha = 0.8f),
+        vertex = ink(),
+        selected = c.tertiary,
+        error = c.error,
+        grid = c.outlineVariant.copy(alpha = 0.5f),
+    )
 }
 
 fun drawingStyle() = Style(gluonCoils = AppSettings.gluonCoils)
@@ -151,6 +164,7 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
     val fonts = LocalMathFonts.current
     val colors = diagramColors()
     val density = LocalDensity.current.density
+    val haptics = LocalHapticFeedback.current
     val diagram = vm.diagram
     val shapes = remember(diagram, AppSettings.gluonCoils, AppSettings.showMomenta) { DiagramShapes(diagram, drawingStyle(), AppSettings.showMomenta) }
     var pan by remember { mutableStateOf(Offset(40f, 60f)) }
@@ -160,6 +174,10 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
     var bending by remember { mutableStateOf<Line?>(null) }
     var preview by remember { mutableStateOf<Diagram?>(null) }
     val gridColor = colors.grid
+    // Tidy and "bring into view": put the diagram's corner near the canvas's.
+    LaunchedEffect(vm.viewVersion) {
+        if (vm.viewVersion > 0 && diagram.points.isNotEmpty()) pan = Offset(48f - diagram.points.minOf { it.x }, 64f - diagram.points.minOf { it.y })
+    }
 
     fun toDiagram(o: Offset) = Pt(o.x / density - pan.x, o.y / density - pan.y)
     fun lineAt(pt: Pt): Line? = diagram.lines.minByOrNull { l -> shapes.shapes[l.id]?.let { Geometry.distance(it, pt) } ?: Float.MAX_VALUE }
@@ -168,7 +186,17 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
     Canvas(
         modifier
             .pointerInput(vm.tool, diagram) {
-                detectTapGestures { o ->
+                detectTapGestures(onLongPress = { o ->
+                    // Long-press a line or vertex for its explanation, as on CAS Calculator's keys.
+                    val pt = toDiagram(o)
+                    val point = Editing.pointAt(diagram, pt.x, pt.y, FeynmanViewModel.HIT_RADIUS)?.takeIf { diagram.degree(it.id) >= 2 }
+                    val line = if (point == null) lineAt(pt) else null
+                    if (point != null || line != null) {
+                        if (AppSettings.haptics) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        vm.helpPoint = point?.id
+                        vm.helpLine = line?.id
+                    }
+                }) { o ->
                     val pt = toDiagram(o)
                     val point = Editing.pointAt(diagram, pt.x, pt.y, FeynmanViewModel.HIT_RADIUS)
                     val line = if (point == null) lineAt(pt) else null

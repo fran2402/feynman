@@ -40,6 +40,9 @@ class FeynmanViewModel(app: Application) : AndroidViewModel(app) {
     var particle by mutableStateOf(SM.electron.id)
     var selectedLine by mutableStateOf<Int?>(null)
     var selectedPoint by mutableStateOf<Int?>(null)
+    /** The line or vertex whose explanation is open (after a long press). */
+    var helpLine by mutableStateOf<Int?>(null)
+    var helpPoint by mutableStateOf<Int?>(null)
 
     private val undo = ArrayList<Pair<Int, Diagram>>()
     private val redo = ArrayList<Pair<Int, Diagram>>()
@@ -132,6 +135,18 @@ class FeynmanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clear() = edit { Diagram(name = it.name) }
+
+    /** Bumped to make the canvas bring the diagram back into view. */
+    var viewVersion by mutableStateOf(0)
+        private set
+
+    /** Tidies the drawing (undoable) and brings it into view. */
+    fun tidy() {
+        edit { Editing.tidy(it) }
+        viewVersion++
+    }
+
+    fun recenter() { viewVersion++ }
 
     // --- Solving -----------------------------------------------------------------------------
 

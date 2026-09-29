@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +21,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,10 +48,13 @@ fun AppScreen() {
     val switchTo = { m: Mode -> mode = m; prefs.edit().putString("mode", m.name).apply() }
     var projects by remember { mutableStateOf(false) }
 
-    Column(Modifier.fillMaxSize().background(colors.surface).systemBarsPadding()) {
+    // A Surface sets the content color, so every text, icon and formula without its own color
+    // is onSurface (white-ish in dark mode) rather than black.
+    Surface(Modifier.fillMaxSize(), color = colors.surface, contentColor = ink()) {
+    Column(Modifier.fillMaxSize().systemBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                IconButton(onClick = { projects = true }) { Icon(Icons.Default.FolderOpen, contentDescription = "Saved diagrams", tint = colors.onSurfaceVariant) }
+                IconButton(onClick = { projects = true }) { Icon(Icons.Default.FolderOpen, contentDescription = "Saved diagrams", tint = inkVariant()) }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { ModeSwitcher(mode, onSelect = switchTo) }
             Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { MenuAction(vm) }
@@ -63,6 +66,7 @@ fun AppScreen() {
                 Mode.Rules -> RulesScreen()
             }
         }
+    }
     }
     if (projects) ProjectsPage(vm, onClose = { projects = false })
 }
@@ -78,7 +82,7 @@ private fun MenuAction(vm: FeynmanViewModel) {
     if (settings) AppSettingsPage(vm, onBack = { settings = false }, onAcknowledgements = { settings = false; acknowledgements = true })
     if (acknowledgements) AcknowledgementsDialog(onDismiss = { acknowledgements = false })
     Box {
-        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = colors.onSurfaceVariant) }
+        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = inkVariant()) }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("Copy as TikZ-Feynman") }, onClick = { menu = false; clipboard.setText(AnnotatedString(TikZ.of(vm.diagram))) })
             DropdownMenuItem(text = { Text("Copy the amplitude (LaTeX)") }, onClick = {

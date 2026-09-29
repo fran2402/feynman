@@ -79,12 +79,12 @@ fun AcknowledgementsDialog(onDismiss: () -> Unit) {
     FullScreenPage("Acknowledgements", onBack = onDismiss) {
         Text(
             "Feynman is built on the work of many people. Tap any entry to read more.",
-            style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium, color = inkVariant(),
         )
         CREDITS.forEach { group ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Text(group.title, style = MaterialTheme.typography.titleMedium, color = colors.primary)
-                Text(group.intro, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                Text(group.intro, style = MaterialTheme.typography.bodySmall, color = inkVariant())
                 group.credits.forEach { c ->
                     Column(
                         Modifier
@@ -96,12 +96,12 @@ fun AcknowledgementsDialog(onDismiss: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(c.name, style = MaterialTheme.typography.titleSmall, color = colors.onSurface, modifier = Modifier.weight(1f))
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                            Text(c.name, style = MaterialTheme.typography.titleSmall, color = ink(), modifier = Modifier.weight(1f))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = inkVariant(), modifier = Modifier.size(16.dp))
                         }
-                        if (c.by != "—") Text(c.by, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                        Text("Used for: " + c.use, style = MaterialTheme.typography.bodyMedium, color = colors.onSurface)
-                        Text(c.about, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        if (c.by != "—") Text(c.by, style = MaterialTheme.typography.bodySmall, color = inkVariant())
+                        Text("Used for: " + c.use, style = MaterialTheme.typography.bodyMedium, color = ink())
+                        Text(c.about, style = MaterialTheme.typography.bodySmall, color = inkVariant())
                         if (c.licence != "—") {
                             Text(
                                 c.licence,

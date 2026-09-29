@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -36,14 +38,16 @@ import androidx.compose.ui.unit.sp
 import com.example.feynman.physics.ConventionPresets
 import com.example.feynman.physics.Conventions
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppSettingsPage(vm: FeynmanViewModel, onBack: () -> Unit, onAcknowledgements: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val changed = { vm.settingsChanged() }
+    val uri = LocalUriHandler.current
     FullScreenPage("Settings", onBack = onBack) {
         SettingsSection("Sign conventions")
         Text("Books differ in the signs of the couplings and fields (Romão & Silva's Tables 2 and 3). Pick a book, or set each η.",
-            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            style = MaterialTheme.typography.bodySmall, color = inkVariant())
         val conv = AppSettings.conventions
         ConventionPresets.all.forEach { p ->
             Row(
@@ -51,9 +55,23 @@ fun AppSettingsPage(vm: FeynmanViewModel, onBack: () -> Unit, onAcknowledgements
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(selected = conv == p.conv && ConventionPresets.all.first { it.conv == conv } == p, onClick = { AppSettings.changeConventions(p.conv); changed() })
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(p.name, style = MaterialTheme.typography.bodyLarge)
-                    Text(p.refs, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    // Each book or paper, linked by its ISBN or DOI.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        p.sources.forEach { src ->
+                            Row(
+                                Modifier.clip(CircleShape).background(colors.surfaceContainerHigh)
+                                    .clickable(onClickLabel = "Open ${src.title}") { runCatching { uri.openUri(src.url) } }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text("${src.title} · ${src.id}", style = MaterialTheme.typography.labelSmall, color = inkVariant())
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = inkVariant(), modifier = Modifier.size(12.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -79,7 +97,7 @@ fun AppSettingsPage(vm: FeynmanViewModel, onBack: () -> Unit, onAcknowledgements
             }
         }
         Text("Only η, η_e, η_Z, η_s and η_G appear in Feynman rules; η′, η_θ and η_Y are shown for completeness.",
-            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            style = MaterialTheme.typography.bodySmall, color = inkVariant())
 
         SettingsSection("Calculation")
         SettingsToggle("Massless fermions", "Neglect every fermion mass except the top quark's (the high-energy limit)", AppSettings.masslessFermions) { AppSettings.changeMasslessFermions(it); changed() }
@@ -110,9 +128,9 @@ fun AppSettingsPage(vm: FeynmanViewModel, onBack: () -> Unit, onAcknowledgements
         ) {
             Column(Modifier.weight(1f)) {
                 Text("Acknowledgements", style = MaterialTheme.typography.bodyLarge)
-                Text("The paper, fonts, libraries and methods, with links", color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text("The paper, fonts, libraries and methods, with links", color = inkVariant(), style = MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = inkVariant())
         }
     }
 }
@@ -126,8 +144,8 @@ private fun SettingsToggle(title: String, detail: String?, checked: Boolean, onC
     val colors = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = colors.onSurface, style = MaterialTheme.typography.bodyLarge)
-            if (detail != null) Text(detail, color = colors.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(title, color = ink(), style = MaterialTheme.typography.bodyLarge)
+            if (detail != null) Text(detail, color = inkVariant(), style = MaterialTheme.typography.bodySmall)
         }
         Switch(checked = checked, onCheckedChange = onChange)
     }
@@ -136,7 +154,7 @@ private fun SettingsToggle(title: String, detail: String?, checked: Boolean, onC
 @Composable
 private fun SettingsChoice(title: String, options: List<String>, selected: Int, onChange: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+        Text(title, color = ink(), style = MaterialTheme.typography.bodyLarge)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { k, name ->
                 SegmentedButton(selected = selected == k, onClick = { onChange(k) }, shape = SegmentedButtonDefaults.itemShape(k, options.size), icon = {}, label = { Text(name, maxLines = 1) })
@@ -152,13 +170,13 @@ private fun ThemeColorChoice() {
     val colors = MaterialTheme.colorScheme
     val current = AppSettings.themeColor
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("App color", color = colors.onSurface, style = MaterialTheme.typography.bodyLarge)
+        Text("App color", color = ink(), style = MaterialTheme.typography.bodyLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             TonalScheme.PRESETS.forEach { (name, seed) ->
                 val selected = current == seed
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(Color(if (seed == 0) 0xFF5B6133.toInt() else seed))
-                        .then(if (selected) Modifier.border(3.dp, colors.onSurface, CircleShape) else Modifier)
+                        .then(if (selected) Modifier.border(3.dp, ink(), CircleShape) else Modifier)
                         .clickable(onClickLabel = name) { AppSettings.changeThemeColor(seed) }
                         .semantics { contentDescription = name + if (selected) ", chosen" else "" },
                 )

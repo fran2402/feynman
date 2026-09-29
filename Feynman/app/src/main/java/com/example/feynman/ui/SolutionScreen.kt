@@ -66,14 +66,14 @@ fun SolutionScreen(vm: FeynmanViewModel) {
                     Text(vm.diagram.name.ifEmpty { "Diagram" }, style = MaterialTheme.typography.titleMedium)
                     if (vm.solving) Row(verticalAlignment = Alignment.CenterVertically) { Busy(Modifier.size(24.dp)); Text("  Working it out…", style = MaterialTheme.typography.bodySmall) }
                     if (vm.diagrams.size > 1) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Add the other tabs", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+                        Text("Add the other tabs", style = MaterialTheme.typography.bodySmall, color = inkVariant(), modifier = Modifier.weight(1f))
                         Switch(vm.sumDiagrams, { vm.sumDiagrams = it; vm.resolve() })
                     }
                 }
             }
         }
         if (s == null) {
-            item { Text(if (vm.solving) "" else "Draw a diagram to see its amplitude.", color = colors.onSurfaceVariant, modifier = Modifier.padding(16.dp)) }
+            item { Text(if (vm.solving) "" else "Draw a diagram to see its amplitude.", color = inkVariant(), modifier = Modifier.padding(16.dp)) }
         } else {
             items(s.steps) { step -> StepCard(step) }
             if ((s.loop != null || s.squared != null) && s.symbols.isNotEmpty()) item { NumbersCard(vm, s) }
@@ -98,25 +98,25 @@ private fun StepCard(step: Step) {
             val tex = step.blocks.filterIsInstance<Block.Math>().joinToString("\n") { it.tex } +
                 step.blocks.filterIsInstance<Block.Rule>().joinToString("\n") { "% (${it.eq})\n${it.tex}" }
             if (tex.isNotBlank()) IconButton(onClick = { clipboard.setText(AnnotatedString(tex)) }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy LaTeX", tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.ContentCopy, contentDescription = "Copy LaTeX", tint = inkVariant(), modifier = Modifier.size(20.dp))
             }
             if (long) IconButton(onClick = { open = !open }) { Icon(if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (open) "Fold" else "Show") }
         }
-        if (!open) { Text("Long — tap to show.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant); return@Column }
+        if (!open) { Text("Long — tap to show.", style = MaterialTheme.typography.bodySmall, color = inkVariant()); return@Column }
         for (b in step.blocks) when (b) {
-            is Block.Text -> RichText(b.text, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            is Block.Math -> MathTex(b.tex, Modifier.fillMaxWidth(), fontSize = 18.sp, color = colors.onSurface)
+            is Block.Text -> RichText(b.text, style = MaterialTheme.typography.bodyMedium, color = inkVariant())
+            is Block.Math -> MathTex(b.tex, Modifier.fillMaxWidth(), fontSize = 18.sp, color = ink())
             is Block.Rule -> Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surfaceContainerHigh).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    MathTex(b.what, fontSize = 14.sp, color = colors.onSurfaceVariant, wrap = false)
+                    MathTex(b.what, fontSize = 14.sp, color = inkVariant(), wrap = false)
                     Box(Modifier.weight(1f))
                     Text("(${b.eq})", style = MaterialTheme.typography.labelMedium, color = colors.primary,
                         modifier = Modifier.clip(CircleShape).background(colors.primaryContainer).padding(horizontal = 10.dp, vertical = 3.dp))
                 }
-                MathTex(b.tex, Modifier.fillMaxWidth(), fontSize = 17.sp, color = colors.onSurface)
+                MathTex(b.tex, Modifier.fillMaxWidth(), fontSize = 17.sp, color = ink())
             }
             is Block.Note -> RichText(b.text, Modifier.clip(RoundedCornerShape(12.dp)).background(colors.tertiaryContainer).padding(10.dp),
                 style = MaterialTheme.typography.bodySmall, color = colors.onTertiaryContainer)
@@ -133,7 +133,7 @@ private fun NumbersCard(vm: FeynmanViewModel, s: Solution) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Numbers", style = MaterialTheme.typography.titleMedium, color = colors.primary)
-        Text("Masses and energies in GeV (Standard Model values to start with).", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        Text("Masses and energies in GeV (Standard Model values to start with).", style = MaterialTheme.typography.bodySmall, color = inkVariant())
         val fields: List<Pair<String, String>> = s.symbols.map { it.name.removeSuffix("*") to it.tex.removeSuffix("^{*}") }.distinct() +
             (if (s.loop != null) listOf("mu" to "\\mu") else emptyList())
         for ((name, tex) in fields) {
@@ -159,7 +159,7 @@ private fun NumbersCard(vm: FeynmanViewModel, s: Solution) {
             }
             if (rows == null) Text("Give every symbol a number.", color = colors.error)
             else {
-                Text("iℳ = i/(16π²) × [pole/ε̄ + finite], for each structure:", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                Text("iℳ = i/(16π²) × [pole/ε̄ + finite], for each structure:", style = MaterialTheme.typography.bodySmall, color = inkVariant())
                 for (r in rows) {
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surfaceContainerHigh).padding(12.dp)) {
                         MathTex(r.structureTex, fontSize = 16.sp)

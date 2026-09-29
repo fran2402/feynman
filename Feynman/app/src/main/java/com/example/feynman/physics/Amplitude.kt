@@ -33,6 +33,8 @@ class Amplitude(
     val loopLines: List<Pair<Line, Mom>>,
     val colorIndices: Map<Int, CIdx>,
     val lorentz: Map<Pair<Int, Boolean>, Idx>,
+    /** The rule at each vertex (by point id). */
+    val vertexRules: Map<Int, RuleUse> = emptyMap(),
 ) {
     val externals get() = topology.externals
     val ok get() = issues.isEmpty()
@@ -232,7 +234,7 @@ class Amplitude(
             texParts.addAll(polTex)
             val tex = if (texParts.isEmpty()) "1" else texParts.joinToString("\\, ")
 
-            return Amplitude(topo, ctx, all, chains, rules, tex, symmetry, loopSign, fermionSign, issues, loopLines, colors, lorentz)
+            return Amplitude(topo, ctx, all, chains, rules, tex, symmetry, loopSign, fermionSign, issues, loopLines, colors, lorentz, vertexRule)
         }
 
         private fun vertexName(legs: List<Leg>) =

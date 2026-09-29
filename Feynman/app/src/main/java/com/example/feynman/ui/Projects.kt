@@ -41,7 +41,7 @@ fun ProjectsPage(vm: FeynmanViewModel, onClose: () -> Unit) {
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     FullScreenPage("Saved diagrams", onBack = onClose) {
         Button(onClick = { saving = true }, modifier = Modifier.fillMaxWidth(), enabled = vm.diagram.lines.isNotEmpty()) { Text("Save the current diagram") }
-        if (vm.projects.isEmpty()) Text("Nothing saved yet.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        if (vm.projects.isEmpty()) Text("Nothing saved yet.", style = MaterialTheme.typography.bodyMedium, color = inkVariant())
         vm.projects.toList().forEach { p ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(colors.surfaceContainerHigh)
@@ -51,9 +51,9 @@ fun ProjectsPage(vm: FeynmanViewModel, onClose: () -> Unit) {
                 Diagram.decode(p.data)?.let { DiagramThumbnail(it, Modifier.width(110.dp).height(70.dp), labels = false) }
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(p.name, style = MaterialTheme.typography.titleMedium)
-                    Text("Saved ${dateFormat.format(Date(p.savedAt))}", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Text("Saved ${dateFormat.format(Date(p.savedAt))}", style = MaterialTheme.typography.bodySmall, color = inkVariant())
                 }
-                IconButton(onClick = { deleting = p }) { Icon(Icons.Default.Delete, contentDescription = "Delete ${p.name}", tint = colors.onSurfaceVariant) }
+                IconButton(onClick = { deleting = p }) { Icon(Icons.Default.Delete, contentDescription = "Delete ${p.name}", tint = inkVariant()) }
             }
         }
     }

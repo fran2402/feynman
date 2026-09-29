@@ -4,7 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesomeMosaic
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -60,6 +63,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -97,8 +102,8 @@ fun EditorScreen(vm: FeynmanViewModel) {
             StatusChip(vm, topo, issues.map { it.message }.distinct(), Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
             if (vm.diagram.lines.isEmpty()) {
                 Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Drag between two points to draw a line", style = MaterialTheme.typography.titleMedium, color = colors.onSurfaceVariant)
-                    Text("Pick the particle below first. Ends with one line are external particles; points where three or four lines meet are vertices.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                    Text("Drag between two points to draw a line", style = MaterialTheme.typography.titleMedium, color = inkVariant())
+                    Text("Pick the particle below first. Ends with one line are external particles; points where three or four lines meet are vertices.", style = MaterialTheme.typography.bodyMedium, color = inkVariant())
                     TextButton(onClick = { templates = true }) { Text("Start from a textbook diagram") }
                 }
             }
@@ -118,13 +123,15 @@ fun EditorScreen(vm: FeynmanViewModel) {
         if (selected == null) Palette(vm)
     }
     if (templates) TemplatesPage(vm, onClose = { templates = false })
+    vm.helpLine?.let { id -> LineHelpDialog(vm, id, onDismiss = { vm.helpLine = null }) }
+    vm.helpPoint?.let { id -> VertexHelpDialog(vm, id, onDismiss = { vm.helpPoint = null }) }
 }
 
 @Composable
 private fun ToolButton(icon: ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val bg by animateColorAsState(if (on) colors.primary else Color.Transparent, label = "tool")
-    val fg by animateColorAsState(if (on) colors.onPrimary else colors.onSurface, label = "toolFg")
+    val fg by animateColorAsState(if (on) colors.onPrimary else ink(), label = "toolFg")
     Box(
         Modifier.size(44.dp).clip(CircleShape).background(bg).clickable(onClick = onClick).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
@@ -147,9 +154,9 @@ private fun DiagramTabs(vm: FeynmanViewModel) {
                     .clickable { if (on) renaming = i else vm.selectTab(i) }.padding(start = 14.dp, end = if (vm.diagrams.size > 1) 4.dp else 14.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(d.name.ifEmpty { "Diagram ${i + 1}" }, style = MaterialTheme.typography.labelLarge, color = if (on) colors.onSecondaryContainer else colors.onSurfaceVariant)
+                Text(d.name.ifEmpty { "Diagram ${i + 1}" }, style = MaterialTheme.typography.labelLarge, color = if (on) colors.onSecondaryContainer else inkVariant())
                 if (vm.diagrams.size > 1) Box(Modifier.size(28.dp).clip(CircleShape).clickable { vm.closeTab(i) }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Close, contentDescription = "Close ${d.name}", modifier = Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                    Icon(Icons.Default.Close, contentDescription = "Close ${d.name}", modifier = Modifier.size(16.dp), tint = inkVariant())
                 }
             }
         }
@@ -157,7 +164,10 @@ private fun DiagramTabs(vm: FeynmanViewModel) {
             Icon(Icons.Default.Add, contentDescription = "New diagram", modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(4.dp))
-        IconButton(onClick = vm::clear, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.DeleteSweep, contentDescription = "Clear this diagram", tint = colors.onSurfaceVariant) }
+        // Tidy: lines up the ends, spaces the vertices, straightens lines; nothing is removed.
+        IconButton(onClick = vm::tidy, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.AutoFixHigh, contentDescription = "Tidy the diagram", tint = inkVariant()) }
+        IconButton(onClick = vm::recenter, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.CenterFocusStrong, contentDescription = "Bring the diagram into view", tint = inkVariant()) }
+        IconButton(onClick = vm::clear, enabled = vm.diagram.lines.isNotEmpty()) { Icon(Icons.Default.DeleteSweep, contentDescription = "Clear this diagram", tint = inkVariant()) }
     }
     renaming?.let { i -> NameDialog("Rename diagram", vm.diagrams[i].name, onDone = { vm.rename(i, it); renaming = null }, onDismiss = { renaming = null }) }
 }
@@ -183,11 +193,16 @@ private fun StatusChip(vm: FeynmanViewModel, topo: Topology, issues: List<String
     }
 }
 
+/** Places in each palette group: the largest group (six) fills two rows of three. */
+private val PALETTE_SLOTS = SM.groups.maxOf { g -> SM.all.count { it.group == g } }.let { (it + 2) / 3 * 3 }
+
 /** The particles, in groups, like the calculator's keypad. */
 @Composable
 private fun Palette(vm: FeynmanViewModel) {
     val colors = MaterialTheme.colorScheme
     var group by remember { mutableStateOf(SM.byId(vm.particle)?.group ?: SM.groups.first()) }
+    var help by remember { mutableStateOf<Particle?>(null) }
+    help?.let { p -> ParticleHelpDialog(p, onDismiss = { help = null }) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Connected button group.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -204,31 +219,47 @@ private fun Palette(vm: FeynmanViewModel) {
                     Modifier.weight(1f).height(40.dp).clip(shape).background(if (on) colors.primary else colors.surfaceContainerHigh).clickable { group = g },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(g.substringBefore(' ').let { if (it == "Gauge") "Bosons" else it }, style = MaterialTheme.typography.labelMedium, color = if (on) colors.onPrimary else colors.onSurface, maxLines = 1)
+                    Text(g.substringBefore(' ').let { if (it == "Gauge") "Bosons" else it }, style = MaterialTheme.typography.labelMedium, color = if (on) colors.onPrimary else ink(), maxLines = 1)
                 }
             }
         }
         val list = SM.all.filter { it.group == group }
+        // Every group is two rows of three, padded with empty places (as the ghosts are), so the
+        // keypad keeps its size whichever group is open.
+        val slots: List<Particle?> = list + List(maxOf(0, PALETTE_SLOTS - list.size)) { null }
         LazyVerticalGrid(
-            GridCells.Fixed(if (list.size > 5) 3 else list.size.coerceAtLeast(1)),
-            Modifier.fillMaxWidth().height(if (list.size > 3) 148.dp else 72.dp).clip(RoundedCornerShape(24.dp)).background(colors.surfaceContainer).padding(6.dp),
+            GridCells.Fixed(3),
+            Modifier.fillMaxWidth().height(148.dp).clip(RoundedCornerShape(24.dp)).background(colors.surfaceContainer).padding(6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
+            userScrollEnabled = false,
         ) {
-            items(list, key = { it.id }) { p -> ParticleKey(p, p.id == vm.particle) { vm.choose(p.id); if (vm.tool != Tool.Draw) vm.tool = Tool.Draw } }
+            items(slots.size) { i ->
+                val p = slots[i]
+                if (p == null) Spacer(Modifier.height(64.dp))
+                else ParticleKey(p, p.id == vm.particle, onHelp = { help = p }) { vm.choose(p.id); if (vm.tool != Tool.Draw) vm.tool = Tool.Draw }
+            }
         }
     }
 }
 
 /** A key: the particle's symbol above a sample of its line. */
 @Composable
-private fun ParticleKey(p: Particle, on: Boolean, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun ParticleKey(p: Particle, on: Boolean, onHelp: () -> Unit, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
     val bg by animateColorAsState(if (on) colors.primaryContainer else colors.surfaceContainerHighest, label = "key")
-    val fg = if (on) colors.onPrimaryContainer else colors.onSurface
+    val fg = if (on && !isDark()) colors.onPrimaryContainer else ink()
     val corner = if (on) 50 else 30
     Column(
-        Modifier.height(64.dp).clip(RoundedCornerShape(percent = corner)).background(bg).clickable(onClick = onClick).semantics { contentDescription = p.name }.padding(vertical = 6.dp),
+        Modifier.height(64.dp).clip(RoundedCornerShape(percent = corner)).background(bg)
+            // Long-press for the particle's card, as on CAS Calculator's keys.
+            .combinedClickable(onClick = onClick, onLongClick = {
+                if (AppSettings.haptics) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onHelp()
+            }, onLongClickLabel = "Explain ${p.name}")
+            .semantics { contentDescription = p.name }.padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -270,7 +301,7 @@ private fun LineSheet(vm: FeynmanViewModel, lineId: Int) {
                             line.isSelfLoop -> "Loop at one vertex"
                             else -> "Internal line (propagator)"
                         },
-                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall, color = inkVariant(),
                     )
                 }
                 IconButton(onClick = { vm.selectedLine = null }) { Icon(Icons.Default.Close, contentDescription = "Done") }
@@ -314,7 +345,7 @@ private fun LineSheet(vm: FeynmanViewModel, lineId: Int) {
 private fun TemplatesPage(vm: FeynmanViewModel, onClose: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     FullScreenPage("Textbook diagrams", onBack = onClose) {
-        Text("Opens in a new tab (or this one, if it's empty). Every diagram can be edited.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+        Text("Opens in a new tab (or this one, if it's empty). Every diagram can be edited.", style = MaterialTheme.typography.bodyMedium, color = inkVariant())
         for (group in Templates.all.map { it.group }.distinct()) {
             Text(group, style = MaterialTheme.typography.titleMedium, color = colors.primary, modifier = Modifier.padding(top = 8.dp))
             for (t in Templates.all.filter { it.group == group }) {
@@ -327,7 +358,7 @@ private fun TemplatesPage(vm: FeynmanViewModel, onClose: () -> Unit) {
                     DiagramThumbnail(t.diagram, Modifier.width(120.dp).height(76.dp), labels = false)
                     Column(Modifier.weight(1f)) {
                         Text(t.name, style = MaterialTheme.typography.titleSmall)
-                        Text(t.about, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        Text(t.about, style = MaterialTheme.typography.bodySmall, color = inkVariant())
                     }
                 }
             }

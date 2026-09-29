@@ -55,3 +55,57 @@ class AppLogicTest {
         assertTrue(abs(row.pole.re - (-4.0 / 3 * 2)) < 1e-9)
     }
 }
+
+class TidyTest {
+    @Test fun tidyKeepsTheDiagramAndLinesUpTheEnds() {
+        for (t in Templates.all) {
+            // Scramble the template, then tidy it.
+            val r = java.util.Random(7)
+            // Pin each end in or out first: scrambling would otherwise change which way they go.
+            val ext = Topology.of(t.diagram).externals.associate { it.point to it.incoming }
+            val messy = t.diagram.copy(points = t.diagram.points.map { p ->
+                p.copy(x = p.x + r.nextInt(200) - 100, y = p.y + r.nextInt(200) - 100, io = ext[p.id]?.let { if (it) Io.In else Io.Out } ?: p.io)
+            })
+            val before = Solver.solve(messy, SolveOptions())
+            val tidy = Editing.tidy(messy)
+            val after = Solver.solve(tidy, SolveOptions())
+            assertEquals(t.name, messy.lines, tidy.lines.map { l -> l.copy(bend = messy.lines.first { it.id == l.id }.bend) })
+            val topo = Topology.of(tidy)
+            val xsIn = topo.externals.filter { it.incoming }.map { tidy.point(it.point).x }.toSet()
+            val xsOut = topo.externals.filter { !it.incoming }.map { tidy.point(it.point).x }.toSet()
+            assertEquals(t.name, 1, xsIn.size); assertEquals(t.name, 1, xsOut.size)
+            assertTrue(t.name, xsIn.first() < xsOut.first())
+            assertEquals(t.name, tidy.points.size, tidy.points.map { it.x to it.y }.toSet().size)
+            // Same physics before and after (momenta may be routed the other way round, so compare
+            // the final answer in invariants).
+            before.squared?.let { assertEquals(t.name, Tex.of(it.result), Tex.of(after.squared!!.result)) }
+            before.loop?.let { assertEquals(t.name, Tex.of(it.pole), Tex.of(after.loop!!.pole)) }
+        }
+    }
+}
+
+class SourcesTest {
+    @Test fun isbnsHaveValidCheckDigits() {
+        val isbns = ConventionPresets.all.flatMap { it.sources }.filter { it.id.startsWith("ISBN") }.map { it.id.filter { c -> c.isDigit() } }
+        assertTrue(isbns.size >= 10)
+        for (i in isbns) {
+            assertEquals(i, 13, i.length)
+            val sum = i.mapIndexed { k, c -> (c - '0') * if (k % 2 == 0) 1 else 3 }.sum()
+            assertEquals("check digit of $i", 0, sum % 10)
+        }
+    }
+
+    @Test fun everyParticleHasACard() {
+        for (p in SM.all) {
+            val card = Help.particle(p)
+            assertTrue(p.id, card.theory.isNotEmpty())
+            for ((_, tex) in card.facts + card.formulas) com.example.feynman.latex.MathParser.parse(tex)
+        }
+        // A line and a vertex of a real diagram.
+        val d = Templates.all.first().diagram
+        for (l in d.lines) assertTrue(Help.line(d, l.id, SolveOptions())!!.formulas.isNotEmpty())
+        val v = Topology.of(d).vertices.first()
+        assertEquals(67, RuleCatalog.byEq(67)!!.eq)
+        assertTrue(Help.vertex(d, v, SolveOptions())!!.formulas.first().second.contains("\\gamma"))
+    }
+}

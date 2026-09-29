@@ -21,6 +21,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -80,6 +82,24 @@ class AndroidMathFonts(context: Context) : MathFonts {
     }
 }
 
+/** Text and maths color: white in dark mode, onSurface in light mode. */
+@Composable
+fun ink(): Color {
+    val c = MaterialTheme.colorScheme
+    return if (c.surface.luminance() < 0.5f) Color.White else c.onSurface
+}
+
+/** Secondary text and icons: white at 80% in dark mode, onSurfaceVariant in light mode. */
+@Composable
+fun inkVariant(): Color {
+    val c = MaterialTheme.colorScheme
+    return if (c.surface.luminance() < 0.5f) Color.White.copy(alpha = 0.8f) else c.onSurfaceVariant
+}
+
+/** Whether the app is shown dark (the setting can differ from the system's). */
+@Composable
+fun isDark(): Boolean = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
 val LocalMathFonts = staticCompositionLocalOf<AndroidMathFonts> { error("Wrap the UI in FeynmanTheme") }
 
 /** Draws a laid-out formula with its baseline at y = [y]. */
@@ -107,7 +127,7 @@ fun DrawScope.drawMath(fonts: AndroidMathFonts, box: Box, x: Float, y: Float, co
  * anything that still doesn't fit scrolls sideways.
  */
 @Composable
-fun MathTex(tex: String, modifier: Modifier = Modifier, fontSize: TextUnit = 18.sp, color: Color = LocalContentColor.current, wrap: Boolean = true) {
+fun MathTex(tex: String, modifier: Modifier = Modifier, fontSize: TextUnit = 18.sp, color: Color = LocalContentColor.current.takeOrElse { ink() }, wrap: Boolean = true) {
     val fonts = LocalMathFonts.current
     val density = LocalDensity.current
     val px = with(density) { (fontSize * AppSettings.mathScale).toPx() }
@@ -133,7 +153,7 @@ fun MathTex(tex: String, modifier: Modifier = Modifier, fontSize: TextUnit = 18.
 /** Words with \( … \) maths in them, wrapped like a paragraph. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun RichText(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyMedium, color: Color = LocalContentColor.current) {
+fun RichText(text: String, modifier: Modifier = Modifier, style: TextStyle = MaterialTheme.typography.bodyMedium, color: Color = LocalContentColor.current.takeOrElse { ink() }) {
     val parts = remember(text) { splitMath(text) }
     if (parts.none { it.second }) { Text(text, modifier, style = style, color = color); return }
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(0.dp), itemVerticalAlignment = Alignment.CenterVertically) {

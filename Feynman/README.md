@@ -15,6 +15,18 @@ The switcher at the top, as in CAS Calculator:
   at the top shows the process and the number of loops, or what's wrong (a vertex the Standard
   Model doesn't have is marked in red). Tabs hold several diagrams; *Textbook diagrams* opens
   22 ready-made ones.
+  - **Tidy** (the wand beside the tabs) makes a drawing readable without changing it: incoming
+    ends in a column on the left and outgoing ones on the right (in their order), vertices spaced
+    by a spring layout from left to right, everything on the grid, single lines straight, parallel
+    lines spread evenly and loops at a vertex pointing outwards. It can be undone; the target
+    button next to it brings the diagram back into view.
+  - **Long-press** a palette key, a drawn line or a vertex for its card, as on CAS Calculator's
+    keys: spin, charge, T³, color, mass (with its value), how it's drawn, its propagator, a line
+    of theory, and every vertex of the paper it takes part in (drawn). For a drawn line the card
+    also gives its momentum and what it is in this diagram (u(p₁), ε*_μ(p₃), or its
+    propagator); for a vertex, the rule it uses with your signs next to the paper's form.
+  - The palette is always two rows of three, with empty places when a group is smaller, so it
+    keeps its size.
 - **Solution.** The worked answer, step by step, each card with a copy-LaTeX button:
   the process; every rule used, with the paper's equation number; the momentum on each line;
   iℳ written factor by factor (spinors ū, v̄, u, v and polarizations ε, ε* on the external
@@ -47,7 +59,10 @@ diagram as `tikz-feynman` code, placed as drawn.
 ## Signs and gauge
 Settings → *Sign conventions* picks a book from the paper's Tables 2 and 3 (Bailin & Love,
 Pokorski, Peskin & Schroeder, Cheng & Li, Itzykson & Zuber, Branco–Lavoura–Silva, Romão, …) or
-sets each η (η, η′, η_Z, η_θ, η_Y, η_e, η_s, η_G). Calculations are in the Feynman–'t Hooft
+sets each η (η, η′, η_Z, η_θ, η_Y, η_e, η_s, η_G). Each book is linked by ISBN (to WorldCat),
+DOI or arXiv number; Bailin & Love, Aitchison & Hey, Okun and Das link to a catalogue search,
+since their ISBNs couldn't be confirmed. In dark mode every formula, label, line, key and icon
+is white. Calculations are in the Feynman–'t Hooft
 gauge, ξ = 1 (so the Goldstone and ghost masses are m_W and m_Z). Other settings: neglect
 fermion masses (except the top's), CKM = 1, gluon style, momentum arrows, grid, theme and
 colors as in CAS Calculator.
