@@ -133,10 +133,70 @@ object SM {
 
     val groups: List<String> = all.map { it.group }.distinct()
 
-    fun byId(id: String): Particle? = all.firstOrNull { it.id == id }
+    /** Any field, the Standard Model's or a model beyond it. */
+    fun byId(id: String): Particle? = all.firstOrNull { it.id == id } ?: BSM.all.firstOrNull { it.id == id }
 
     val upQuarks get() = listOf(up, charm, top)
     val downQuarks get() = listOf(down, strange, bottom)
+}
+
+/** Fields of the other theories: the scalar φ⁴ theory, the two-Higgs-doublet model and a Z′. */
+object BSM {
+    val mPhi = Sym("m_phi", "m", order = 24)
+    val lambda = Sym("lambda", "\\lambda", order = 4)
+    val kappa = Sym("kappa", "\\kappa", order = 4)
+    val mH = Sym("mH", "m_H", order = 22)
+    val mA = Sym("mA", "m_A", order = 22)
+    val mHp = Sym("mHp", "m_{H^\\pm}", order = 22)
+    val mZp = Sym("mZp", "m_{Z'}", order = 21)
+    val gZp = Sym("gZp", "g_{Z'}", order = 2)
+    val cAlpha = Sym("calpha", "c_\\alpha", order = 12)
+    val sAlpha = Sym("salpha", "s_\\alpha", order = 12)
+    val cBeta = Sym("cbeta", "c_\\beta", order = 12)
+    val sBeta = Sym("sbeta", "s_\\beta", order = 12)
+
+    val phi4 = Particle("phi4", "Scalar φ", "\\phi", "\\phi", Spin.Scalar, LineStyle.Scalar, false, mass = mPhi, group = "Scalars")
+    val heavyH = Particle("H", "Heavy Higgs H", "H", "H", Spin.Scalar, LineStyle.Scalar, false, mass = mH, group = "Scalars")
+    val pseudoA = Particle("Ah", "Pseudoscalar A", "A", "A", Spin.Scalar, LineStyle.Scalar, false, mass = mA, group = "Scalars")
+    val chargedH = Particle("Hp", "Charged Higgs H±", "H^+", "H^-", Spin.Scalar, LineStyle.Scalar, true, charge = Rational.ONE, mass = mHp, group = "Scalars")
+    val zPrime = Particle("Zp", "Z′ boson", "Z'", "Z'", Spin.Vector, LineStyle.Boson, false, mass = mZp, group = "Gauge bosons")
+
+    val all = listOf(phi4, heavyH, pseudoA, chargedH, zPrime)
+}
+
+/** The Standard Model's fields (inside [Theory], `SM` names the enum entry). */
+private val F get() = SM
+
+/** Which theory the diagrams are drawn in. */
+enum class Theory(val label: String, val about: String) {
+    SM("Standard Model", "Every rule of Romão & Silva, with Goldstones and ghosts."),
+    QED("QED", "Charged leptons and the photon: vertex (67) and propagators (51), (54)."),
+    QCD("QCD", "Quarks, gluons and gluon ghosts: rules (45)–(50) and (54)."),
+    Phi4("Scalar φ⁴ (and φ³)", "One real scalar with −iλ at four lines and −iκ at three: the textbook toy theory."),
+    TwoHDM("Two Higgs doublets (type II)", "The Standard Model with H, A and H±: couplings scaled by α and β (Gunion–Haber conventions); the extra scalars' self-couplings aren't included."),
+    ZPrime("Standard Model + Z′", "A heavy Z′ with the Z's couplings to fermions times g_{Z′}/g (a sequential Z′)."),
+    ;
+
+    /** The fields on the palette. */
+    val particles: List<Particle> get() = when (this) {
+        SM -> F.all
+        QED -> listOf(F.electron, F.muon, F.tau, F.photon)
+        QCD -> listOf(F.up, F.down, F.charm, F.strange, F.top, F.bottom, F.gluon, F.ghostG)
+        Phi4 -> listOf(BSM.phi4)
+        TwoHDM -> F.all.let { it.take(it.indexOf(F.phi) + 1) + listOf(BSM.heavyH, BSM.pseudoA, BSM.chargedH) + it.drop(it.indexOf(F.phi) + 1) }
+        ZPrime -> F.all.let { it.take(it.indexOf(F.gluon) + 1) + BSM.zPrime + it.drop(it.indexOf(F.gluon) + 1) }
+    }
+
+    fun allows(p: Particle) = p in particles
+    val groups: List<String> get() = particles.map { it.group }.distinct()
+}
+
+/** How the gauge is fixed. */
+enum class Gauge(val label: String, val tex: String) {
+    Feynman("Feynman–'t Hooft", "\\xi = 1"),
+    Landau("Landau", "\\xi = 0"),
+    General("General Rξ", "\\xi"),
+    Unitary("Unitary", "\\xi \\to \\infty"),
 }
 
 /**

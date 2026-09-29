@@ -22,10 +22,13 @@ sealed class ColorFactor {
     data class T(val a: CIdx, val i: CIdx, val j: CIdx) : ColorFactor()
     /** f^{abc}. */
     data class F(val a: CIdx, val b: CIdx, val c: CIdx) : ColorFactor()
+    /** δ_{ij}: a quark keeps its color through a colorless vertex. */
+    data class D(val i: CIdx, val j: CIdx) : ColorFactor()
 
     fun tex(): String = when (this) {
         is T -> "T^{${a.hint}}_{${i.hint}${j.hint}}"
         is F -> "f^{${a.hint}${b.hint}${c.hint}}"
+        is D -> "\\delta_{${i.hint}${j.hint}}"
     }
 }
 
@@ -42,9 +45,12 @@ class Leg(val particle: Particle, val anti: Boolean, val index: Idx, val k: Mom,
 }
 
 /** A rule found for a vertex or line: the paper's equation number, the factor and how it's written. */
-class RuleUse(val eq: Int, val terms: List<VertexTerm>, val tex: String)
+class RuleUse(val eq: Int, val terms: List<VertexTerm>, val tex: String, /** For rules not from the paper (φ⁴, 2HDM, Z′). */ val label: String? = null) {
+    /** "(67)" for the paper's rules, or the model's name for others. */
+    val tag: String get() = label ?: "($eq)"
+}
 
-/** What the rules need to know besides the fields: the signs and the masses in use. */
+/** What the rules need to know besides the fields: the signs, the masses, the theory and the gauge. */
 class RuleContext(
     val conv: Conventions,
     /** A fermion's mass, or null when it's massless (or the setting neglects it). */
@@ -52,10 +58,23 @@ class RuleContext(
     /** V = 1: quarks of different generations don't couple to the W. */
     val ckmIdentity: Boolean = false,
     val names: IndexNames = IndexNames(),
-)
+    val theory: Theory = Theory.SM,
+    val gauge: Gauge = Gauge.Feynman,
+) {
+    fun copy(massOf: (Particle) -> Sym? = this.massOf) = RuleContext(conv, massOf, ckmIdentity, names, theory, gauge)
+
+    /** ξ as an expression: 1, 0, the symbol ξ (or 1 in the unitary gauge, where Goldstones and ghosts are absent). */
+    val xi: Expr get() = when (gauge) {
+        Gauge.Feynman, Gauge.Unitary -> Expr.ONE
+        Gauge.Landau -> Expr.ZERO
+        Gauge.General -> sym(Rules.xiSym)
+    }
+}
 
 object Rules {
     val sqrt2 = Sym("sqrt2", "\\sqrt{2}", order = 5)
+    /** The gauge parameter of a general Rξ gauge (one ξ for every gauge boson). */
+    val xiSym = Sym("xi", "\\xi", order = 13)
 
     private val e get() = sym(Couplings.e)
     private val g get() = sym(Couplings.g)
@@ -133,6 +152,19 @@ object Rules {
 
     /** The rule for a vertex with these legs, or null if the Standard Model has none. */
     fun vertex(legs: List<Leg>, ctx: RuleContext): RuleUse? {
+        if (legs.any { !ctx.theory.allows(it.particle) }) return null
+        return when (ctx.theory) {
+            Theory.SM -> smVertex(legs, ctx)
+            Theory.QED -> smVertex(legs, ctx)?.takeIf { it.eq == 67 }
+            Theory.QCD -> smVertex(legs, ctx)?.takeIf { it.eq in 47..50 }
+            Theory.Phi4 -> Models.phi4(legs)
+            Theory.TwoHDM -> Models.twoHdm(legs, ctx)
+            Theory.ZPrime -> if (legs.any { it.particle === BSM.zPrime }) Models.zPrime(legs, ctx) else smVertex(legs, ctx)
+        }
+    }
+
+    /** The paper's rule for a vertex of Standard Model fields. */
+    fun smVertex(legs: List<Leg>, ctx: RuleContext): RuleUse? {
         val fermions = legs.filter { it.particle.isFermion }
         return when (fermions.size) {
             0 -> bosonic(legs, ctx)
@@ -142,6 +174,16 @@ object Rules {
     }
 
     private fun fermionic(legs: List<Leg>, ctx: RuleContext): RuleUse? {
+        val r = fermionicRule(legs, ctx) ?: return null
+        val out = legs.firstOrNull { it.particle.isFermion && it.anti } ?: return r
+        val inn = legs.firstOrNull { it.particle.isFermion && !it.anti && it !== out } ?: return r
+        // A colorless boson leaves the quark's color alone: δ_{ij}.
+        if (out.color == null || inn.color == null || r.terms.any { t -> t.color.isNotEmpty() }) return r
+        val delta = ColorFactor.D(out.color, inn.color)
+        return RuleUse(r.eq, r.terms.map { VertexTerm(listOf(delta), it.expr) }, r.tex, r.label)
+    }
+
+    private fun fermionicRule(legs: List<Leg>, ctx: RuleContext): RuleUse? {
         if (legs.size != 3) return null
         val out = legs.firstOrNull { it.particle.isFermion && it.anti } ?: return null
         val inn = legs.firstOrNull { it.particle.isFermion && !it.anti && it !== out } ?: return null
@@ -329,13 +371,13 @@ object Rules {
             "W~,cA~,cp" -> ghost(113, one("cA~"), one("W~"), i * e * CQ.of(etaG * etaE), x)
             "W,cA~,cm" -> ghost(113, one("cA~"), one("W"), i * e * CQ.of(-etaG * etaE), x)
             // Ghost–Higgs and ghost–Goldstone, (114)–(119), with ξ = 1.
-            "cp,cp~,phiZ" -> single(114, g * mW * CQ.of(etaG) * Rational.of(1, 2), Expr.ONE, "")
-            "cm,cm~,phiZ" -> single(114, g * mW * CQ.of(-etaG) * Rational.of(1, 2), Expr.ONE, "")
-            "cp,cp~,h", "cm,cm~,h" -> single(115, i * g * mW * CQ.of(-etaG) * Rational.of(1, 2), Expr.ONE, "")
-            "cZ,cZ~,h" -> single(116, i * g * mZ * inv(Couplings.cW) * CQ.of(-etaG) * Rational.of(1, 2), Expr.ONE, "")
-            "cZ~,cp,phi~", "cZ~,cm,phi" -> single(117, i * g * mZ * CQ.of(etaG * etaZ) * Rational.of(1, 2), Expr.ONE, "")
-            "cZ,cp~,phi", "cZ,cm~,phi~" -> single(118, i * g * cos2 * mW * inv(Couplings.cW) * CQ.of(-etaG * etaZ) * Rational.of(1, 2), Expr.ONE, "")
-            "cA,cp~,phi", "cA,cm~,phi~" -> single(119, i * e * mW * CQ.of(-etaG * etaE * eta), Expr.ONE, "")
+            "cp,cp~,phiZ" -> single(114, g * mW * CQ.of(etaG) * Rational.of(1, 2) * ctx.xi, Expr.ONE, "")
+            "cm,cm~,phiZ" -> single(114, g * mW * CQ.of(-etaG) * Rational.of(1, 2) * ctx.xi, Expr.ONE, "")
+            "cp,cp~,h", "cm,cm~,h" -> single(115, i * g * mW * CQ.of(-etaG) * Rational.of(1, 2) * ctx.xi, Expr.ONE, "")
+            "cZ,cZ~,h" -> single(116, i * g * mZ * inv(Couplings.cW) * CQ.of(-etaG) * Rational.of(1, 2) * ctx.xi, Expr.ONE, "")
+            "cZ~,cp,phi~", "cZ~,cm,phi" -> single(117, i * g * mZ * CQ.of(etaG * etaZ) * Rational.of(1, 2) * ctx.xi, Expr.ONE, "")
+            "cZ,cp~,phi", "cZ,cm~,phi~" -> single(118, i * g * cos2 * mW * inv(Couplings.cW) * CQ.of(-etaG * etaZ) * Rational.of(1, 2) * ctx.xi, Expr.ONE, "")
+            "cA,cp~,phi", "cA,cm~,phi~" -> single(119, i * e * mW * CQ.of(-etaG * etaE * eta) * ctx.xi, Expr.ONE, "")
             else -> null
         }
     }
@@ -374,19 +416,50 @@ object Rules {
             }
             Spin.Vector -> {
                 val mass = if (p === SM.photon || p === SM.gluon) null else p.mass
-                val den = propagatorDen(q, mass)
-                val eq = when (p) { SM.gluon -> 45; SM.photon -> 51; SM.w -> 52; else -> 53 }
+                val eq = when (p) { SM.gluon -> 45; SM.photon -> 51; SM.w -> 52; SM.z -> 53; else -> 53 }
+                val label = if (p === BSM.zPrime) "Z′ propagator" else null
                 val delta = if (p === SM.gluon) "\\delta_{ab}" else ""
-                RuleUse(eq, listOf(VertexTerm(emptyList(), met(from, to) * den * CQ.imag(-1))),
-                    "\\frac{-i $delta g_{${x.name(from)}${x.name(to)}}}{${denTex(den)}}")
+                val (M, N) = x.name(from) to x.name(to)
+                val den = propagatorDen(q, mass)
+                val metric = met(from, to) * den * CQ.imag(-1)
+                val kk = vec(q, from) * vec(q, to)
+                val qt = MomNames.tex(q).let { if (q.size > 1) "\\left($it\\right)" else it }
+                when {
+                    ctx.gauge == Gauge.Feynman || (ctx.gauge == Gauge.Unitary && mass == null) ->
+                        RuleUse(eq, listOf(VertexTerm(emptyList(), metric)), "\\frac{-i $delta g_{$M$N}}{${denTex(den)}}", label)
+                    ctx.gauge == Gauge.Unitary -> {
+                        // −i(g − kk/M²)/(k² − M²)
+                        val t = metric - kk * den * sym(mass!!, -2) * CQ.imag(-1)
+                        RuleUse(eq, listOf(VertexTerm(emptyList(), t)),
+                            "\\frac{-i $delta}{${denTex(den)}}\\left[g_{$M$N} - \\frac{${qt}_{$M}${qt}_{$N}}{${mass.tex}^{2}}\\right]", label)
+                    }
+                    else -> {
+                        // −i/(k² − M²) [g − (1 − ξ) kk/(k² − ξM²)]
+                        val xi = ctx.xi
+                        val m2 = if (mass == null) Expr.ZERO else sym(mass, 2)
+                        val xiTex = if (ctx.gauge == Gauge.Landau) "" else "\\xi "
+                        val den2 = propagatorDen(q, xi * m2, if (mass == null || ctx.gauge == Gauge.Landau) null else "\\xi ${mass.tex}^{2}")
+                        val t = metric + kk * den * den2 * (Expr.ONE - xi) * CQ.I
+                        val oneMinus = if (ctx.gauge == Gauge.Landau) "" else "(1 - \\xi)"
+                        RuleUse(eq, listOf(VertexTerm(emptyList(), Rules.simplifyRoots(t))),
+                            "\\frac{-i $delta}{${denTex(den)}}\\left[g_{$M$N} - $oneMinus\\frac{${qt}_{$M}${qt}_{$N}}{${denTex(den2)}}\\right]".replace("$xiTex$xiTex", xiTex), label)
+                    }
+                }
             }
             Spin.Scalar -> {
-                val den = propagatorDen(q, p.mass)
-                val eq = when (p) { SM.higgs -> 55; SM.phiZ -> 56; else -> 57 }
-                RuleUse(eq, listOf(VertexTerm(emptyList(), den * Expr.I)), "\\frac{i}{${denTex(den)}}")
+                // Goldstones (and ghosts) have mass² ξM² in an Rξ gauge.
+                val goldstone = p === SM.phiZ || p === SM.phi
+                val m2 = p.mass?.let { sym(it, 2) * (if (goldstone) ctx.xi else Expr.ONE) } ?: Expr.ZERO
+                val m2Tex = p.mass?.let { if (goldstone && ctx.gauge == Gauge.General) "\\xi ${it.tex}^{2}" else "${it.tex}^{2}" }
+                val den = propagatorDen(q, m2, m2Tex)
+                val eq = when (p) { SM.higgs -> 55; SM.phiZ -> 56; SM.phi -> 57; else -> 55 }
+                val label = when (p) { BSM.phi4 -> "φ propagator"; BSM.heavyH, BSM.pseudoA, BSM.chargedH -> "2HDM scalar"; else -> null }
+                RuleUse(eq, listOf(VertexTerm(emptyList(), den * Expr.I)), "\\frac{i}{${denTex(den)}}", label)
             }
             Spin.Ghost -> {
-                val den = propagatorDen(q, p.mass)
+                val m2 = p.mass?.let { sym(it, 2) * ctx.xi } ?: Expr.ZERO
+                val m2Tex = p.mass?.let { if (ctx.gauge == Gauge.General) "\\xi ${it.tex}^{2}" else "${it.tex}^{2}" }
+                val den = propagatorDen(q, m2, m2Tex)
                 val eq = when (p) { SM.ghostG -> 46; SM.ghostA -> 105; SM.ghostZ -> 107; else -> 106 }
                 val delta = if (p === SM.ghostG) "\\delta_{ab}" else ""
                 RuleUse(eq, listOf(VertexTerm(emptyList(), den * CQ.imag(etaG))),

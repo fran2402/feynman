@@ -72,7 +72,7 @@ object MathParser {
         "cdot" to ("⋅" to Node.Kind.Bin), "times" to ("×" to Node.Kind.Bin), "pm" to ("±" to Node.Kind.Bin), "mp" to ("∓" to Node.Kind.Bin),
         "otimes" to ("⊗" to Node.Kind.Bin), "to" to ("→" to Node.Kind.Rel), "rightarrow" to ("→" to Node.Kind.Rel), "leftarrow" to ("←" to Node.Kind.Rel),
         "leq" to ("≤" to Node.Kind.Rel), "geq" to ("≥" to Node.Kind.Rel), "neq" to ("≠" to Node.Kind.Rel), "approx" to ("≈" to Node.Kind.Rel),
-        "equiv" to ("≡" to Node.Kind.Rel), "sim" to ("∼" to Node.Kind.Rel), "propto" to ("∝" to Node.Kind.Rel), "in" to ("∈" to Node.Kind.Rel),
+        "equiv" to ("≡" to Node.Kind.Rel), "sim" to ("∼" to Node.Kind.Rel), "propto" to ("∝" to Node.Kind.Rel), "in" to ("∈" to Node.Kind.Rel), "supset" to ("⊃" to Node.Kind.Rel), "subset" to ("⊂" to Node.Kind.Rel),
         "dagger" to ("†" to Node.Kind.Ord), "infty" to ("∞" to Node.Kind.Ord), "partial" to ("∂" to Node.Kind.Ord), "nabla" to ("∇" to Node.Kind.Ord),
         "ell" to ("ℓ" to Node.Kind.Ord), "hbar" to ("ℏ" to Node.Kind.Ord), "prime" to ("′" to Node.Kind.Ord), "ldots" to ("…" to Node.Kind.Inner),
         "cdots" to ("⋯" to Node.Kind.Inner), "dots" to ("…" to Node.Kind.Inner), "circ" to ("∘" to Node.Kind.Bin), "ast" to ("∗" to Node.Kind.Bin),

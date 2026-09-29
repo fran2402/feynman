@@ -43,11 +43,13 @@ object Color {
     private fun value(factor: ColorFactor, v: Map<CIdx, Int>): Complex = when (factor) {
         is ColorFactor.T -> t(v[factor.a]!!, v[factor.i]!!, v[factor.j]!!)
         is ColorFactor.F -> Complex(f[v[factor.a]!!][v[factor.b]!!][v[factor.c]!!])
+        is ColorFactor.D -> if (v[factor.i] == v[factor.j]) Complex.ONE else Complex.ZERO
     }
 
     private fun indicesOf(f: ColorFactor) = when (f) {
         is ColorFactor.T -> listOf(f.a, f.i, f.j)
         is ColorFactor.F -> listOf(f.a, f.b, f.c)
+        is ColorFactor.D -> listOf(f.i, f.j)
     }
 
     private fun range(i: CIdx) = if (i.adjoint) 8 else 3
@@ -93,36 +95,40 @@ object Color {
         return CQ(re, im)
     }
 
-    /**
-     * Writes a tensor over the external indices as a multiple of a standard structure when
-     * possible: 1, δ_{ij}, δ^{ab}, (T^a)_{ij} or f^{abc}. Returns the LaTeX, or null.
-     */
-    fun describe(tensor: Array<Complex>, externals: List<CIdx>): String? {
-        if (tensor.all { it.abs < 1e-12 }) return "0"
-        val basis: Pair<String, Array<Complex>>? = when {
-            externals.isEmpty() -> "" to arrayOf(Complex.ONE)
-            externals.size == 2 && externals.all { !it.adjoint } -> "\\delta_{${externals[0].hint}${externals[1].hint}}" to
-                Array(9) { k -> if (k / 3 == k % 3) Complex.ONE else Complex.ZERO }
-            externals.size == 2 && externals.all { it.adjoint } -> "\\delta^{${externals[0].hint}${externals[1].hint}}" to
-                Array(64) { k -> if (k / 8 == k % 8) Complex.ONE else Complex.ZERO }
-            externals.size == 3 && externals.count { it.adjoint } == 1 -> {
-                val a = externals.first { it.adjoint }
-                val (i, j) = externals.filter { !it.adjoint }
-                "T^{${a.hint}}_{${i.hint}${j.hint}}" to tensor(listOf(ColorFactor.T(a, i, j)), externals)
-            }
-            externals.size == 3 && externals.all { it.adjoint } -> "f^{${externals[0].hint}${externals[1].hint}${externals[2].hint}}" to
-                tensor(listOf(ColorFactor.F(externals[0], externals[1], externals[2])), externals)
-            else -> null
+    /** The standard structure for these external indices (1, δ, T^a or f^{abc}) and its LaTeX. */
+    private fun basis(externals: List<CIdx>): Pair<String, Array<Complex>>? = when {
+        externals.isEmpty() -> "" to arrayOf(Complex.ONE)
+        externals.size == 2 && externals.all { !it.adjoint } -> "\\delta_{${externals[0].hint}${externals[1].hint}}" to
+            Array(9) { k -> if (k / 3 == k % 3) Complex.ONE else Complex.ZERO }
+        externals.size == 2 && externals.all { it.adjoint } -> "\\delta^{${externals[0].hint}${externals[1].hint}}" to
+            Array(64) { k -> if (k / 8 == k % 8) Complex.ONE else Complex.ZERO }
+        externals.size == 3 && externals.count { it.adjoint } == 1 -> {
+            val a = externals.first { it.adjoint }
+            val (i, j) = externals.filter { !it.adjoint }
+            "T^{${a.hint}}_{${i.hint}${j.hint}}" to tensor(listOf(ColorFactor.T(a, i, j)), externals)
         }
-        basis ?: return null
-        val (tex, b) = basis
+        externals.size == 3 && externals.all { it.adjoint } -> "f^{${externals[0].hint}${externals[1].hint}${externals[2].hint}}" to
+            tensor(listOf(ColorFactor.F(externals[0], externals[1], externals[2])), externals)
+        else -> null
+    }
+
+    /** The tensor as c × the standard structure: c, or null if it isn't a multiple. */
+    fun coefficient(tensor: Array<Complex>, externals: List<CIdx>): CQ? {
+        val (_, b) = basis(externals) ?: return null
         // Least squares: c = ⟨b, t⟩/⟨b, b⟩, then check.
         var num = Complex.ZERO
         var den = 0.0
         for (k in b.indices) { num += b[k].conj() * tensor[k]; den += b[k].abs * b[k].abs }
         val c = num * (1 / den)
         for (k in b.indices) if ((tensor[k] - b[k] * c).abs > 1e-9) return null
-        val cq = exact(c)
+        return exact(c)
+    }
+
+    /** A tensor over the external indices as a multiple of its standard structure, as LaTeX (or null). */
+    fun describe(tensor: Array<Complex>, externals: List<CIdx>): String? {
+        if (tensor.all { it.abs < 1e-12 }) return "0"
+        val (tex, _) = basis(externals) ?: return null
+        val cq = coefficient(tensor, externals) ?: return null
         val coef = Tex.of(Expr.const(cq))
         return when {
             tex.isEmpty() -> coef

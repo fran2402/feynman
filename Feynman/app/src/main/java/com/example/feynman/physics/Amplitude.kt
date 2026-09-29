@@ -50,6 +50,12 @@ class Amplitude(
         fun build(d: Diagram, ctx: RuleContext): Amplitude {
             val topo = Topology.of(d)
             val issues = ArrayList(topo.issues)
+            for (l in d.lines) {
+                val p = SM.byId(l.particle) ?: continue
+                if (!ctx.theory.allows(p)) issues.add(Issue("${p.name} isn't part of ${ctx.theory.label} (Settings → Theory)", line = l.id))
+                else if (ctx.gauge == Gauge.Unitary && (p === SM.phiZ || p === SM.phi || (p.isGhost && p.mass != null)))
+                    issues.add(Issue("There are no ${if (p.isGhost) "ghosts of massive bosons" else "Goldstone bosons"} in the unitary gauge", line = l.id))
+            }
             val names = ctx.names
             val pool = IndexPool()
             // Lorentz indices at each end of each vector line (line id, at its start?).

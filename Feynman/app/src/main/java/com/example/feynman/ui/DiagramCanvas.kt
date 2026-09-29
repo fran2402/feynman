@@ -1,6 +1,11 @@
 package com.example.feynman.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
@@ -18,7 +23,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -167,29 +175,65 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
     val haptics = LocalHapticFeedback.current
     val diagram = vm.diagram
     val shapes = remember(diagram, AppSettings.gluonCoils, AppSettings.showMomenta) { DiagramShapes(diagram, drawingStyle(), AppSettings.showMomenta) }
+    // The view: a diagram point p is drawn at (p·zoom + pan) dp.
     var pan by remember { mutableStateOf(Offset(40f, 60f)) }
+    var zoom by remember { mutableStateOf(1f) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var dragFrom by remember { mutableStateOf<Offset?>(null) }
     var dragTo by remember { mutableStateOf<Offset?>(null) }
     var moving by remember { mutableStateOf<Int?>(null) }
     var bending by remember { mutableStateOf<Line?>(null) }
     var preview by remember { mutableStateOf<Diagram?>(null) }
     val gridColor = colors.grid
-    // Tidy and "bring into view": put the diagram's corner near the canvas's.
-    LaunchedEffect(vm.viewVersion) {
-        if (vm.viewVersion > 0 && diagram.points.isNotEmpty()) pan = Offset(48f - diagram.points.minOf { it.x }, 64f - diagram.points.minOf { it.y })
+    /** Fits the whole diagram in the canvas (double tap, Tidy, and "bring into view"). */
+    fun fit() {
+        val d = vm.diagram
+        if (d.points.isEmpty() || canvasSize == IntSize.Zero) { zoom = 1f; pan = Offset(40f, 60f); return }
+        val w = canvasSize.width / density; val h = canvasSize.height / density
+        // Room for the labels and the toolbar at the bottom.
+        val margin = 48f
+        val minX = d.points.minOf { it.x } - margin; val maxX = d.points.maxOf { it.x } + margin
+        val minY = d.points.minOf { it.y } - margin; val maxY = d.points.maxOf { it.y } + margin
+        zoom = minOf(w / (maxX - minX), (h - 72f) / (maxY - minY)).coerceIn(0.25f, 2.5f)
+        pan = Offset(w / 2 - (minX + maxX) / 2 * zoom, (h - 72f) / 2 - (minY + maxY) / 2 * zoom)
     }
+    LaunchedEffect(vm.viewVersion) { if (vm.viewVersion > 0) fit() }
 
-    fun toDiagram(o: Offset) = Pt(o.x / density - pan.x, o.y / density - pan.y)
+    fun toDiagram(o: Offset) = Pt((o.x / density - pan.x) / zoom, (o.y / density - pan.y) / zoom)
+    val hit = FeynmanViewModel.HIT_RADIUS / zoom
     fun lineAt(pt: Pt): Line? = diagram.lines.minByOrNull { l -> shapes.shapes[l.id]?.let { Geometry.distance(it, pt) } ?: Float.MAX_VALUE }
-        ?.takeIf { l -> (shapes.shapes[l.id]?.let { Geometry.distance(it, pt) } ?: Float.MAX_VALUE) < FeynmanViewModel.HIT_RADIUS }
+        ?.takeIf { l -> (shapes.shapes[l.id]?.let { Geometry.distance(it, pt) } ?: Float.MAX_VALUE) < hit }
 
     Canvas(
         modifier
-            .pointerInput(vm.tool, diagram) {
-                detectTapGestures(onLongPress = { o ->
+            .onSizeChanged { canvasSize = it }
+            // Two fingers pinch to zoom and pan, whatever the tool (seen first, so the tools let go).
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.changes.count { it.pressed } >= 2) {
+                            val z = event.calculateZoom()
+                            val move = event.calculatePan()
+                            val c = event.calculateCentroid(useCurrent = true)
+                            if (c != Offset.Unspecified) {
+                                val cd = Offset(c.x / density, c.y / density)
+                                val nz = (zoom * z).coerceIn(0.25f, 4f)
+                                pan = cd - (cd - pan) * (nz / zoom) + Offset(move.x / density, move.y / density)
+                                zoom = nz
+                            }
+                            event.changes.forEach { it.consume() }
+                            dragFrom = null; dragTo = null; moving = null; bending = null; preview = null
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .pointerInput(vm.tool, diagram, zoom) {
+                detectTapGestures(onDoubleTap = { fit() }, onLongPress = { o ->
                     // Long-press a line or vertex for its explanation, as on CAS Calculator's keys.
                     val pt = toDiagram(o)
-                    val point = Editing.pointAt(diagram, pt.x, pt.y, FeynmanViewModel.HIT_RADIUS)?.takeIf { diagram.degree(it.id) >= 2 }
+                    val point = Editing.pointAt(diagram, pt.x, pt.y, hit)?.takeIf { diagram.degree(it.id) >= 2 }
                     val line = if (point == null) lineAt(pt) else null
                     if (point != null || line != null) {
                         if (AppSettings.haptics) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -198,7 +242,7 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
                     }
                 }) { o ->
                     val pt = toDiagram(o)
-                    val point = Editing.pointAt(diagram, pt.x, pt.y, FeynmanViewModel.HIT_RADIUS)
+                    val point = Editing.pointAt(diagram, pt.x, pt.y, hit)
                     val line = if (point == null) lineAt(pt) else null
                     when (vm.tool) {
                         Tool.Erase -> when {
@@ -212,13 +256,13 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
                     }
                 }
             }
-            .pointerInput(vm.tool, diagram) {
+            .pointerInput(vm.tool, diagram, zoom) {
                 detectDragGestures(
                     onDragStart = { o ->
                         val pt = toDiagram(o)
                         when (vm.tool) {
                             Tool.Draw -> { dragFrom = o; dragTo = o }
-                            Tool.Move -> moving = Editing.pointAt(diagram, pt.x, pt.y, FeynmanViewModel.HIT_RADIUS * 1.3f)?.id
+                            Tool.Move -> moving = Editing.pointAt(diagram, pt.x, pt.y, hit * 1.3f)?.id
                             Tool.Bend -> bending = lineAt(pt)
                             Tool.Erase -> {}
                         }
@@ -249,13 +293,13 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
                                 val a = dragFrom; val b = dragTo
                                 if (a != null && b != null) {
                                     val pa = toDiagram(a); val pb = toDiagram(b)
-                                    val self = Editing.pointAt(diagram, pa.x, pa.y, FeynmanViewModel.HIT_RADIUS)?.let { p ->
-                                        hypot(pb.x - p.x, pb.y - p.y) < FeynmanViewModel.HIT_RADIUS
+                                    val self = Editing.pointAt(diagram, pa.x, pa.y, hit)?.let { p ->
+                                        hypot(pb.x - p.x, pb.y - p.y) < hit
                                     } ?: false
-                                    if (self || hypot(pb.x - pa.x, pb.y - pa.y) > 12f) {
+                                    if (self || hypot(pb.x - pa.x, pb.y - pa.y) > 12f / zoom) {
                                         var newLine: Int? = null
                                         vm.edit { d ->
-                                            val (nd, id) = Editing.addLine(d, pa.x, pa.y, pb.x, pb.y, vm.particle, FeynmanViewModel.HIT_RADIUS, AppSettings.snapToGrid)
+                                            val (nd, id) = Editing.addLine(d, pa.x, pa.y, pb.x, pb.y, vm.particle, hit, AppSettings.snapToGrid)
                                             newLine = id
                                             nd
                                         }
@@ -277,27 +321,28 @@ fun DiagramEditor(vm: FeynmanViewModel, modifier: Modifier = Modifier, badPoints
                 )
             },
     ) {
-        val unit = density
-        // Dot grid.
-        if (AppSettings.showGrid) {
-            val step = Editing.GRID * unit
-            val sx = (pan.x * unit) % step
-            val sy = (pan.y * unit) % step
+        val unit = density * zoom
+        fun screen(p: Pt) = Offset((p.x * zoom + pan.x) * density, (p.y * zoom + pan.y) * density)
+        // Dot grid (left out when zoomed so far out that it would be a haze).
+        val step = Editing.GRID * unit
+        if (AppSettings.showGrid && step >= 8f) {
+            val sx = (pan.x * density) % step
+            val sy = (pan.y * density) % step
             var x = sx
             while (x < size.width) {
                 var y = sy
-                while (y < size.height) { drawCircle(gridColor, 1.1f * unit, Offset(x, y)); y += step }
+                while (y < size.height) { drawCircle(gridColor, 1.1f * density, Offset(x, y)); y += step }
                 x += step
             }
         }
         val shown = preview?.let { DiagramShapes(it, drawingStyle(), AppSettings.showMomenta) } ?: shapes
-        drawDiagram(shown, fonts, colors, { p -> Offset((p.x + pan.x) * unit, (p.y + pan.y) * unit) }, unit, vm.selectedLine, vm.selectedPoint, badPoints)
+        drawDiagram(shown, fonts, colors, ::screen, unit, vm.selectedLine, vm.selectedPoint, badPoints)
         // The line being drawn, in the chosen particle's style.
         val a = dragFrom; val b = dragTo
         if (a != null && b != null) {
             val pa = toDiagram(a); val pb = toDiagram(b)
             val sh = Geometry.shape(SM.byId(vm.particle), pa, pb, 0f, false, drawingStyle(), false)
-            drawLineShape(sh, colors.selected, { p -> Offset((p.x + pan.x) * unit, (p.y + pan.y) * unit) }, unit, drawingStyle())
+            drawLineShape(sh, colors.selected, ::screen, unit, drawingStyle())
         }
     }
 }

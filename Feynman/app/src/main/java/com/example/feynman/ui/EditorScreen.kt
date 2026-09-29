@@ -76,6 +76,7 @@ import com.example.feynman.physics.Io
 import com.example.feynman.physics.Particle
 import com.example.feynman.physics.SM
 import com.example.feynman.physics.Templates
+import com.example.feynman.physics.Theory
 import com.example.feynman.physics.Topology
 
 /** The drawing mode: tabs of diagrams, the canvas with its tools, and the particle palette. */
@@ -194,36 +195,39 @@ private fun StatusChip(vm: FeynmanViewModel, topo: Topology, issues: List<String
 }
 
 /** Places in each palette group: the largest group (six) fills two rows of three. */
-private val PALETTE_SLOTS = SM.groups.maxOf { g -> SM.all.count { it.group == g } }.let { (it + 2) / 3 * 3 }
+private val PALETTE_SLOTS = Theory.entries.maxOf { t -> t.groups.maxOf { g -> t.particles.count { it.group == g } } }.let { (it + 2) / 3 * 3 }
 
 /** The particles, in groups, like the calculator's keypad. */
 @Composable
 private fun Palette(vm: FeynmanViewModel) {
     val colors = MaterialTheme.colorScheme
-    var group by remember { mutableStateOf(SM.byId(vm.particle)?.group ?: SM.groups.first()) }
+    val theory = AppSettings.theory
+    val groups = theory.groups
+    var chosen by remember { mutableStateOf(SM.byId(vm.particle)?.group ?: groups.first()) }
+    val group = if (chosen in groups) chosen else groups.first()
     var help by remember { mutableStateOf<Particle?>(null) }
     help?.let { p -> ParticleHelpDialog(p, onDismiss = { help = null }) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Connected button group.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            SM.groups.forEachIndexed { i, g ->
+            groups.forEachIndexed { i, g ->
                 val on = g == group
                 val outer = 20.dp; val inner = 6.dp
                 val shape = when {
                     on -> RoundedCornerShape(outer)
                     i == 0 -> RoundedCornerShape(topStart = outer, bottomStart = outer, topEnd = inner, bottomEnd = inner)
-                    i == SM.groups.lastIndex -> RoundedCornerShape(topStart = inner, bottomStart = inner, topEnd = outer, bottomEnd = outer)
+                    i == groups.lastIndex -> RoundedCornerShape(topStart = inner, bottomStart = inner, topEnd = outer, bottomEnd = outer)
                     else -> RoundedCornerShape(inner)
                 }
                 Box(
-                    Modifier.weight(1f).height(40.dp).clip(shape).background(if (on) colors.primary else colors.surfaceContainerHigh).clickable { group = g },
+                    Modifier.weight(1f).height(40.dp).clip(shape).background(if (on) colors.primary else colors.surfaceContainerHigh).clickable { chosen = g },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(g.substringBefore(' ').let { if (it == "Gauge") "Bosons" else it }, style = MaterialTheme.typography.labelMedium, color = if (on) colors.onPrimary else ink(), maxLines = 1)
                 }
             }
         }
-        val list = SM.all.filter { it.group == group }
+        val list = theory.particles.filter { it.group == group }
         // Every group is two rows of three, padded with empty places (as the ghosts are), so the
         // keypad keeps its size whichever group is open.
         val slots: List<Particle?> = list + List(maxOf(0, PALETTE_SLOTS - list.size)) { null }
@@ -308,7 +312,7 @@ private fun LineSheet(vm: FeynmanViewModel, lineId: Int) {
             }
             // Change the particle, within its group first.
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (q in SM.all.sortedBy { if (it.group == p?.group) 0 else 1 }) {
+                for (q in AppSettings.theory.particles.sortedBy { if (it.group == p?.group) 0 else 1 }) {
                     FilterChip(selected = q.id == line.particle, onClick = { vm.edit { Editing.setParticle(it, line.id, q.id) } }, label = { MathTex(q.tex, fontSize = 15.sp, wrap = false) })
                 }
             }

@@ -132,7 +132,13 @@ class Eps private constructor(val slots: List<Slot>) : Atom() {
  * A propagator denominator (q² − m²), kept whole so the answer shows 1/(s − m_Z²).
  * [content] is its value, which is rewritten when the kinematics are substituted.
  */
-class Den(val content: Expr, val display: String? = null) : Atom() {
+class Den(
+    val content: Expr,
+    val display: String? = null,
+    /** The momentum and mass² it was made from (kept for loop integrals; not part of its identity). */
+    val q: Mom? = null,
+    val m2: Expr? = null,
+) : Atom() {
     override val key = "Q:" + content.canonical()
 }
 
@@ -330,13 +336,16 @@ val projL get() = (diracOne - gamma5) * Rational.of(1, 2)
 val projR get() = (diracOne + gamma5) * Rational.of(1, 2)
 
 /** (q² − m²) as a propagator denominator raised to −1, shown as written: (p_1 + p_2)^2 - m_Z^2. */
-fun propagatorDen(q: Mom, mass: Sym?): Expr {
-    val m2 = if (mass == null) Expr.ZERO else sym(mass, 2)
+fun propagatorDen(q: Mom, mass: Sym?): Expr =
+    propagatorDen(q, if (mass == null) Expr.ZERO else sym(mass, 2), mass?.let { "${it.tex}^{2}" })
+
+/** (q² − m²)⁻¹ with any m² (ξm_W² in an Rξ gauge); [m2Tex] is how m² is written. */
+fun propagatorDen(q: Mom, m2: Expr, m2Tex: String?): Expr {
     val content = dot(q, q) - m2
     val qt = MomNames.tex(q)
     val square = if (q.size == 1 && q.values.first().abs() == Rational.ONE) "$qt^{2}".removePrefix("-") else "\\left($qt\\right)^{2}"
-    val display = if (mass == null) square else "$square - ${mass.tex}^{2}"
-    return atom(Den(content, display), -1)
+    val display = if (m2.isZero) square else "$square - ${m2Tex ?: Tex.paren(Tex.of(m2))}"
+    return atom(Den(content, display, q, m2), -1)
 }
 
 fun levi(slots: List<Slot>): Expr {

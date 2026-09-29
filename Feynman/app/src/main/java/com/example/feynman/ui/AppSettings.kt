@@ -6,7 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.feynman.physics.Conventions
+import com.example.feynman.physics.Gauge
 import com.example.feynman.physics.SolveOptions
+import com.example.feynman.physics.Theory
 
 /** App-wide settings, kept in preferences and observed by Compose. */
 object AppSettings {
@@ -53,9 +55,18 @@ object AppSettings {
     var showGrid by mutableStateOf(true)
         private set
 
+    /** The theory the palette and the rules come from. */
+    var theory by mutableStateOf(Theory.SM)
+        private set
+    var gauge by mutableStateOf(Gauge.Feynman)
+        private set
+    /** Breit–Wigner widths for unstable particles in cross sections and widths. */
+    var widths by mutableStateOf(true)
+        private set
+
     val mathScale: Float get() = when (mathSize) { 0 -> 0.85f; 2 -> 1.18f; else -> 1f }
 
-    val solveOptions: SolveOptions get() = SolveOptions(conventions, masslessFermions, ckmIdentity)
+    val solveOptions: SolveOptions get() = SolveOptions(conventions, masslessFermions, ckmIdentity, theory, gauge, widths)
 
     fun init(context: Context) {
         val p = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -74,6 +85,9 @@ object AppSettings {
         showMomenta = p.getBoolean("showMomenta", true)
         snapToGrid = p.getBoolean("snapToGrid", true)
         showGrid = p.getBoolean("showGrid", true)
+        theory = runCatching { Theory.valueOf(p.getString("theory", null)!!) }.getOrDefault(Theory.SM)
+        gauge = runCatching { Gauge.valueOf(p.getString("gauge", null)!!) }.getOrDefault(Gauge.Feynman)
+        widths = p.getBoolean("widths", true)
     }
 
     private fun save(key: String, value: Any) {
@@ -97,4 +111,7 @@ object AppSettings {
     fun changeShowMomenta(v: Boolean) { showMomenta = v; save("showMomenta", v) }
     fun changeSnapToGrid(v: Boolean) { snapToGrid = v; save("snapToGrid", v) }
     fun changeShowGrid(v: Boolean) { showGrid = v; save("showGrid", v) }
+    fun changeTheory(v: Theory) { theory = v; save("theory", v.name) }
+    fun changeGauge(v: Gauge) { gauge = v; save("gauge", v.name) }
+    fun changeWidths(v: Boolean) { widths = v; save("widths", v) }
 }

@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.feynman.physics.ConventionPresets
 import com.example.feynman.physics.Conventions
+import com.example.feynman.physics.Gauge
+import com.example.feynman.physics.Theory
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -99,9 +101,33 @@ fun AppSettingsPage(vm: FeynmanViewModel, onBack: () -> Unit, onAcknowledgements
         Text("Only η, η_e, η_Z, η_s and η_G appear in Feynman rules; η′, η_θ and η_Y are shown for completeness.",
             style = MaterialTheme.typography.bodySmall, color = inkVariant())
 
+        SettingsSection("Theory")
+        Theory.entries.forEach { t ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { AppSettings.changeTheory(t); changed() }.padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = AppSettings.theory == t, onClick = { AppSettings.changeTheory(t); changed() })
+                Column(Modifier.weight(1f)) {
+                    Text(t.label, style = MaterialTheme.typography.bodyLarge)
+                    RichText(t.about, style = MaterialTheme.typography.bodySmall, color = inkVariant())
+                }
+            }
+        }
+
+        SettingsSection("Gauge")
+        SettingsChoice("Gauge fixing", listOf("Feynman", "Landau", "General ξ", "Unitary"), AppSettings.gauge.ordinal) { AppSettings.changeGauge(Gauge.entries[it]); changed() }
+        Text(when (AppSettings.gauge) {
+            Gauge.Feynman -> "ξ = 1: propagators −i g_μν/(k² − M²); Goldstones and ghosts have the gauge boson's mass."
+            Gauge.Landau -> "ξ = 0: transverse propagators; Goldstones and ghosts are massless."
+            Gauge.General -> "ξ kept as a symbol, so you can watch it cancel; ξ = 1 in the numbers unless you change it."
+            Gauge.Unitary -> "Only physical fields: massive propagators −i(g − kk/M²)/(k² − M²), no Goldstones or massive-boson ghosts."
+        }, style = MaterialTheme.typography.bodySmall, color = inkVariant())
+
         SettingsSection("Calculation")
         SettingsToggle("Massless fermions", "Neglect every fermion mass except the top quark's (the high-energy limit)", AppSettings.masslessFermions) { AppSettings.changeMasslessFermions(it); changed() }
         SettingsToggle("CKM matrix = 1", "Quarks couple to the W only within a generation", AppSettings.ckmIdentity) { AppSettings.changeCkmIdentity(it); changed() }
+        SettingsToggle("Widths in propagators", "Breit–Wigner for Z, W, h, t (and new particles) in cross sections and widths", AppSettings.widths) { AppSettings.changeWidths(it); changed() }
 
         SettingsSection("Drawing")
         SettingsToggle("Gluons as coils", "Most textbooks; off draws the paper's tight wave", AppSettings.gluonCoils, AppSettings::changeGluonCoils)

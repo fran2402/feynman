@@ -79,11 +79,20 @@ private fun MenuAction(vm: FeynmanViewModel) {
     var menu by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(false) }
     var acknowledgements by remember { mutableStateOf(false) }
+    var generate by remember { mutableStateOf(false) }
+    var export by remember { mutableStateOf(false) }
+    var running by remember { mutableStateOf(false) }
+    if (generate) GeneratePage(vm, onClose = { generate = false })
+    if (export) ExportPage(vm, onBack = { export = false })
+    if (running) RunningPage(onBack = { running = false })
     if (settings) AppSettingsPage(vm, onBack = { settings = false }, onAcknowledgements = { settings = false; acknowledgements = true })
     if (acknowledgements) AcknowledgementsDialog(onDismiss = { acknowledgements = false })
     Box {
         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More options", tint = inkVariant()) }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("Generate diagrams…") }, onClick = { menu = false; generate = true })
+            DropdownMenuItem(text = { Text("Export…") }, onClick = { menu = false; export = true })
+            DropdownMenuItem(text = { Text("Running couplings") }, onClick = { menu = false; running = true })
             DropdownMenuItem(text = { Text("Copy as TikZ-Feynman") }, onClick = { menu = false; clipboard.setText(AnnotatedString(TikZ.of(vm.diagram))) })
             DropdownMenuItem(text = { Text("Copy the amplitude (LaTeX)") }, onClick = {
                 menu = false

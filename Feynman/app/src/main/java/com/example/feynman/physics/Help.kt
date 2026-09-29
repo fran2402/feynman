@@ -59,6 +59,11 @@ object Help {
         "cp" to "The W⁺'s Faddeev–Popov ghost, with mass √ξ m_W (c⁺ and c⁻ are different fields, not each other's antiparticles).",
         "cm" to "The W⁻'s Faddeev–Popov ghost, with mass √ξ m_W.",
         "om" to "The gluon's Faddeev–Popov ghost: needed in loops of gluons so that only physical polarizations contribute.",
+        "phi4" to "A real scalar field with a quartic self-coupling λ (and optionally a cubic κ): the simplest interacting theory, used to learn renormalization.",
+        "H" to "The heavier CP-even Higgs of a two-Higgs-doublet model; its couplings to W and Z are cos(β − α) times the Standard Model's.",
+        "Ah" to "The CP-odd Higgs of a two-Higgs-doublet model: it has no tree-level coupling to WW or ZZ.",
+        "Hp" to "The charged Higgs of a two-Higgs-doublet model: it couples to fermions like the charged Goldstone, times cot β (up) and tan β (down).",
+        "Zp" to "A heavy neutral gauge boson with the Z's couplings to fermions, scaled by g_{Z′}/g (a sequential Z′).",
     )
 
     private val propagatorEq = mapOf("g" to 45, "om" to 46, "A" to 51, "W" to 52, "Z" to 53, "h" to 55, "phiZ" to 56, "phi" to 57, "cA" to 105, "cp" to 106, "cm" to 106, "cZ" to 107)
@@ -164,9 +169,9 @@ object Help {
         }
         val printed = RuleCatalog.byEq(r.eq)
         val formulas = ArrayList<Pair<String, String>>()
-        formulas.add("Here, eq. (${r.eq}) with your signs" to r.tex)
+        formulas.add("Here, ${if (r.label == null) "eq. (${r.eq})" else r.tag} with your signs" to r.tex)
         printed?.let { formulas.add("As printed in the paper" to it.tex) }
-        return HelpCard("Vertex", symbol, listOf("Lines" to "${d.degree(pointId)}", "Rule" to "\\text{eq. (${r.eq})}"), formulas,
+        return HelpCard("Vertex", symbol, listOf("Lines" to "${d.degree(pointId)}", "Rule" to "\\text{${r.tag}}"), formulas,
             "All momenta flow into the vertex (except the outgoing ghost's p in ghost vertices). Momentum is conserved here, which fixes the internal momenta.",
             "Drag the point with the move tool; erase it to remove every line at it.", listOfNotNull(printed))
     }

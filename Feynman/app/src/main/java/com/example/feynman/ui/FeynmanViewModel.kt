@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.feynman.physics.Diagram
 import com.example.feynman.physics.Editing
 import com.example.feynman.physics.Evaluate
+import com.example.feynman.physics.Generate
 import com.example.feynman.physics.SM
 import com.example.feynman.physics.SolveOptions
 import com.example.feynman.physics.Solution
@@ -147,6 +148,35 @@ class FeynmanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun recenter() { viewVersion++ }
+
+    // --- Generating every diagram of a process ----------------------------------------------
+
+    var generating by mutableStateOf(false)
+        private set
+    var generateNote by mutableStateOf<String?>(null)
+
+    /** Makes every diagram of the process and opens them as tabs; [onDone] gets how many. */
+    fun generate(legs: List<Generate.Leg>, options: Generate.Options, onDone: (Int) -> Unit) {
+        generating = true
+        generateNote = null
+        viewModelScope.launch {
+            val ctx = Solver.context(AppSettings.solveOptions)
+            val r = withContext(Dispatchers.Default) { runCatching { Generate.generate(legs, ctx, options) }.getOrNull() }
+            generating = false
+            if (r == null) { generateNote = "Something went wrong making the diagrams."; onDone(0); return@launch }
+            generateNote = r.note
+            if (r.diagrams.isNotEmpty()) {
+                val first = diagrams.size
+                val replaceEmpty = diagrams.size == 1 && diagrams[0].lines.isEmpty()
+                r.diagrams.forEachIndexed { i, d -> diagrams.add(d.copy(name = "${i + 1}/${r.diagrams.size}")) }
+                if (replaceEmpty) diagrams.removeAt(0)
+                selectTab(if (replaceEmpty) 0 else first)
+                viewVersion++
+            }
+            onDone(r.diagrams.size)
+            persist()
+        }
+    }
 
     // --- Solving -----------------------------------------------------------------------------
 

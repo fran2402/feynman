@@ -49,6 +49,37 @@ The switcher at the top, as in CAS Calculator:
 - **Rules.** All 75 rules of the paper, drawn in its style and written with the η signs left in,
   by section, with your current signs at the top.
 
+## Also in the app
+- **Zoom:** pinch with two fingers to zoom and pan, whatever tool is on; **double-tap** the canvas
+  to fit the whole diagram in view (Tidy does the same).
+- **Theories** (Settings → Theory): the Standard Model; QED; QCD; scalar φ⁴ (with φ³); a type-II
+  two-Higgs-doublet model (H, A, H± with couplings from the paper's rules times the usual
+  α, β factors, as in the Higgs Hunter's Guide; the extra scalars' self-couplings aren't
+  included); and the Standard Model with a sequential Z′. The palette shows the theory's fields.
+- **Gauges** (Settings → Gauge): Feynman–'t Hooft, Landau, general Rξ with ξ kept as a symbol
+  (e⁺e⁻ → μ⁺μ⁻ comes out independent of ξ; the electron self-energy pole is e²ξp̸ − (3 + ξ)e²m),
+  and unitary (no Goldstones or massive-boson ghosts). Gauge propagators with several
+  denominators split a loop into several integrals, each worked through and added.
+- **Generate diagrams** (⋮ menu): pick the incoming and outgoing particles; every tree diagram
+  (or every one-loop diagram, without leg corrections and tadpoles if you like) of the theory
+  opens as tabs, laid out tidily. Trees are built from currents joined at valid vertices; loops by
+  joining two extra legs of trees, with copies removed by graph isomorphism. For example QED
+  gives 2 diagrams for Bhabha, Compton and e⁺e⁻ → γγ, and the Standard Model 4 for
+  e⁺e⁻ → μ⁺μ⁻ (γ, Z, h, φ_Z).
+- **Cross sections and widths** (under Numbers): σ at √s in pb with dσ/dcos θ and σ(√s) charts
+  for 2 → 2, Γ and τ for 1 → 2 and 1 → 3 decays (Dalitz-plot integration), with Breit–Wigner
+  widths for Z, W, h, t and new particles (can be switched off).
+- **Passarino–Veltman functions:** A₀ and B₀ in closed form (every ∫₀¹ xᵏ ln Δ dx exactly, at the
+  roots of Δ), so two-point finite parts are exact; C₀ with its inner integral in closed form;
+  D₀ numerically. Their values appear under Numbers.
+- **Renormalization** (a step for one-loop diagrams): the MS-bar counterterm with δZ, δM (or
+  δZ_L, δZ_R), δZ₃ and δM², δ₁ for vertices, a transversality check for vector self-energies,
+  the Ward identity δ₁ = δ₂ when the self-energy is in another tab, and the loop's share of
+  β(e) or β(g_s). **Running couplings** (⋮ menu): α(μ) and α_s(μ) at one loop with thresholds.
+- **Export** (⋮ menu): PNG, SVG (fonts embedded), PDF (the diagram and the whole solution),
+  a LaTeX document (TikZ-Feynman diagram and every step with breqn; compile with LuaLaTeX) or
+  just the TikZ-Feynman code; share or save each.
+
 ## How lines are drawn
 As in the paper's figures: fermions solid with an arrow on the line, γ, Z and W as waves (W with
 a small arrow for the flow of W⁺), gluons as a tighter wave (or coils, in Settings), h and φ
@@ -91,7 +122,9 @@ gradle test                       # physics, layout and editing tests
 gradle run --args="out-dir"       # renders every textbook diagram and its solution to PNG
 ```
 
-The tests check, among others: traces (including γ5 and ε·ε = −24) and d-dimensional
+The tests check, among others: σ(e⁺e⁻ → μ⁺μ⁻) = 4πα²/3s, Drell–Yan's 1/N_c, Γ(Z → ee),
+Γ(h → bb̄), the muon lifetime G_F²m_μ⁵/192π³, ξ-independence, the Ward identity, B₀ and C₀
+against quadrature, diagram counts, tidy and the 2HDM scaling of h → bb̄; and also: traces (including γ5 and ε·ε = −24) and d-dimensional
 contractions; e⁻e⁺ → μ⁻μ⁺ (2e⁴(t² + u²)/s² massless, and the full massive formula); Bhabha
 scattering with its interference sign; the QED vacuum polarization (transverse, pole
 −(4/3)e²(p²g − pp), finite part against a direct integration) and the electron self-energy pole

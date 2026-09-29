@@ -11,17 +11,21 @@ sealed class Block {
     /** Display maths. */
     class Math(val tex: String, val tag: String? = null) : Block()
     /** A rule: what it is, the paper's equation number and the factor. */
-    class Rule(val what: String, val eq: Int, val tex: String) : Block()
+    class Rule(val what: String, val eq: Int, val tex: String, val tag: String = "($eq)") : Block()
     class Note(val text: String) : Block()
 }
 
 class Step(val title: String, val blocks: List<Block>)
 
-class SolveOptions(
+data class SolveOptions(
     val conv: Conventions = Conventions(),
     /** Neglect every fermion mass except the top quark's. */
     val masslessFermions: Boolean = false,
     val ckmIdentity: Boolean = false,
+    val theory: Theory = Theory.SM,
+    val gauge: Gauge = Gauge.Feynman,
+    /** Width of unstable bosons in the numbers (Breit–Wigner). */
+    val widths: Boolean = true,
 )
 
 class Solution(
@@ -39,6 +43,8 @@ object Solver {
         o.conv,
         massOf = { p -> if (o.masslessFermions && p.isFermion && p !== SM.top) null else p.mass },
         ckmIdentity = o.ckmIdentity,
+        theory = o.theory,
+        gauge = o.gauge,
     )
 
     /** Pulls out the common factor of every term (symbols' lowest powers and the coefficients' gcd). */
@@ -116,8 +122,8 @@ object Solver {
             return Solution(steps, amp, null, null, amp.issues, emptyList())
         }
         // Rules.
-        steps.add(Step("Feynman rules", amp.rules.map { (what, r) -> Block.Rule(what, r.eq, r.tex) } +
-            Block.Text("Equation numbers are Romão & Silva's. Signs: ${ConventionPresets.nameOf(options.conv)} (η = ${sign(options.conv.eta)}, η_e = ${sign(options.conv.etaE)}, η_Z = ${sign(options.conv.etaZ)}, η_s = ${sign(options.conv.etaS)}, η_G = ${sign(options.conv.etaG)}); Feynman–'t Hooft gauge, ξ = 1.")))
+        steps.add(Step("Feynman rules", amp.rules.map { (what, r) -> Block.Rule(what, r.eq, r.tex, r.tag) } +
+            Block.Text("Equation numbers are Romão & Silva's. Signs: ${ConventionPresets.nameOf(options.conv)} (η = ${sign(options.conv.eta)}, η_e = ${sign(options.conv.etaE)}, η_Z = ${sign(options.conv.etaZ)}, η_s = ${sign(options.conv.etaS)}, η_G = ${sign(options.conv.etaG)}); ${options.gauge.label} gauge, \\(${options.gauge.tex}\\); ${options.theory.label}.")))
         // Momenta.
         val momBlocks = ArrayList<Block>()
         for (l in topo.internal) {
@@ -171,14 +177,14 @@ object Solver {
             }
         } else if (topo.loops == 1) {
             loop = Loop.evaluate(amp, kin)
-            if (loop != null) steps.addAll(loopSteps(amp, loop, kin))
+            if (loop != null) steps.addAll(loopSteps(amp, loop, kin, ctx, others))
         } else {
             steps.add(Step("Loop integrals", listOf(Block.Text("Integrals with ${topo.loops} loops are written out above but not evaluated: the app works one-loop integrals through."))))
         }
-        val symbols = (listOfNotNull(squared?.result, loop?.pole, loop?.finiteIntegrand, loop?.delta).flatMap { it.atoms() } +
-            (loop?.delta?.atoms() ?: emptySet()))
+        val symbols = (listOfNotNull(squared?.dots, squared?.result, loop?.pole).flatMap { it.atoms() } +
+            (loop?.pieces.orEmpty().flatMap { it.finiteIntegrand.atoms() + it.delta.atoms() }))
             .flatMap { a -> if (a is Den) a.content.atoms() else listOf(a) }
-            .filterIsInstance<Sym>().filter { it != Loop.deltaSym && it != Loop.lnDelta && it != Rules.sqrt2 && !(loop?.xs?.contains(it) ?: false) }
+            .filterIsInstance<Sym>().filter { it != Loop.deltaSym && it != Loop.lnDelta && it != Rules.sqrt2 && !(loop?.pieces.orEmpty().any { p -> it in p.xs }) }
             .distinctBy { it.name }.sortedBy { it.key }
         return Solution(steps, amp, loop, squared, amp.issues, symbols)
     }
@@ -191,63 +197,76 @@ object Solver {
         return a.externals.zip(b.externals).all { (x, y) -> x.particle === y.particle && x.incoming == y.incoming && x.anti == y.anti }
     }
 
-    private fun loopSteps(amp: Amplitude, r: LoopResult, kin: Kinematics): List<Step> {
+    private fun loopSteps(amp: Amplitude, r: LoopResult, kin: Kinematics, ctx: RuleContext, others: List<Diagram>): List<Step> {
         val steps = ArrayList<Step>()
-        val n = r.n
         val open = { i: Int -> Amplitude.spinorTex(r.chains[i].left) + "\\, " }
         val close = { i: Int -> "\\, " + Amplitude.spinorTex(r.chains[i].right) }
-        steps.add(Step("Denominators", buildList {
-            r.denominators.forEachIndexed { i, d ->
-                val o = MomNames.tex(d.offset)
-                val kp = if (d.offset.isEmpty()) "k^{2}" else "\\left(k ${if (o.startsWith("-")) "- ${o.drop(1)}" else "+ $o"}\\right)^{2}"
-                add(Block.Math("D_{${i + 1}} = $kp${d.mass?.let { " - ${it.tex}^{2}" } ?: ""}\\qquad (${d.particle.tex})"))
-            }
-            add(Block.Text("In \\(d = 4 - 2\\epsilon\\) dimensions, \\(\\int d^4k/(2\\pi)^4 \\to \\mu^{2\\epsilon}\\int d^dk/(2\\pi)^d\\)."))
-            add(Block.Math("\\text{Scalar integral: } \\frac{i}{16\\pi^{2}}\\, ${r.scalarName}"))
-        }))
-        if (n > 1) steps.add(Step("Feynman parameters", buildList {
-            val xs = r.xs.map { it.tex }
-            add(Block.Math("\\frac{1}{D_{1}\\cdots D_{$n}} = ${factorial(n - 1)}\\int_{0}^{1}${xs.joinToString("") { "d$it\\," }}\\frac{\\delta\\left(1 - ${xs.joinToString(" - ")}\\right)}{\\left(${(1..n).joinToString(" + ") { "${xs[it - 1]} D_{$it}" }}\\right)^{$n}}".replace("1}\\int", "1}\\int").replace("= 1\\int", "= \\int")))
-            add(Block.Text("Shifting \\(k = \\ell - P\\) completes the square, \\(\\sum x_i D_i = \\ell^2 - \\Delta\\), with"))
-            add(Block.Math("P = ${r.shift.joinToString(" + ") { (c, m) -> "${Tex.paren(Tex.of(c))}\\,${MomNames.tex(m)}" }.ifEmpty { "0" }}".replace("+ -", "- ")))
-            add(Block.Math("\\Delta = ${Tex.of(r.delta)}"))
-            if (n == 2) add(Block.Text("with \\(x_2 = 1 - x\\)."))
-            else add(Block.Text("with \\(${r.xs.last().tex} = 1 - ${r.xs.dropLast(1).joinToString(" - ") { it.tex }}\\)."))
-        })) else steps.add(Step("Shift", listOf(Block.Math("\\Delta = ${Tex.of(r.delta)}"))))
-        steps.add(Step("Numerator", buildList {
-            add(Block.Text("After the traces and index contractions (before the shift):"))
-            add(Block.Math("N = ${Tex.of(r.numerator, IndexNames(), open, close)}"))
-            add(Block.Text("After \\(k = \\ell - P\\), odd powers of \\(\\ell\\) vanish and \\(\\ell^\\mu\\ell^\\nu \\to g^{\\mu\\nu}\\ell^2/d\\):"))
-            for ((a, e) in r.reduced.toSortedMap()) {
-                val power = when (a) { 0 -> ""; 1 -> "\\ell^{2}\\,"; else -> "(\\ell^{2})^{$a}\\," }
-                add(Block.Math("N_{$a} = $power${Tex.of(e, IndexNames(), open, close)}"))
-            }
-        }))
+        val many = r.pieces.size > 1
+        if (many) steps.add(Step("Loop integrals", listOf(
+            Block.Text("The gauge-boson propagators split the amplitude into ${r.pieces.size} integrals with different denominators; each is worked out below and the results are added."),
+        )))
+        for ((pi, piece) in r.pieces.withIndex()) {
+            val suffix = if (many) " (integral ${pi + 1})" else ""
+            val n = piece.n
+            steps.add(Step("Denominators$suffix", buildList {
+                piece.denominators.forEachIndexed { i, d -> add(Block.Math("D_{${i + 1}} = ${d.tex}")) }
+                if (pi == 0) add(Block.Text("In \\(d = 4 - 2\\epsilon\\) dimensions, \\(\\int d^4k/(2\\pi)^4 \\to \\mu^{2\\epsilon}\\int d^dk/(2\\pi)^d\\)."))
+                add(Block.Math("\\text{Scalar integral: } \\frac{i}{16\\pi^{2}}\\, ${piece.scalarName}"))
+            }))
+            if (n > 1) steps.add(Step("Feynman parameters$suffix", buildList {
+                val xs = piece.xs.map { it.tex }
+                val fact = factorial(n - 1)
+                add(Block.Math("\\frac{1}{D_{1}\\cdots D_{$n}} = ${if (fact == 1L) "" else "$fact"}\\int_{0}^{1}${xs.joinToString("") { "d$it\\," }}\\frac{\\delta\\left(1 - ${xs.joinToString(" - ")}\\right)}{\\left(${(1..n).joinToString(" + ") { "${xs[it - 1]} D_{$it}" }}\\right)^{$n}}"))
+                add(Block.Text("Shifting \\(k = \\ell - P\\) completes the square, \\(\\sum x_i D_i = \\ell^2 - \\Delta\\), with"))
+                add(Block.Math("P = ${piece.shift.joinToString(" + ") { (c, m) -> "${Tex.paren(Tex.of(c))}\\,${MomNames.tex(m)}" }.ifEmpty { "0" }}".replace("+ -", "- ")))
+                add(Block.Math("\\Delta = ${Tex.of(piece.delta)}"))
+                if (n == 2) add(Block.Text("with \\(x_2 = 1 - x\\)."))
+                else add(Block.Text("with \\(${piece.xs.last().tex} = 1 - ${piece.xs.dropLast(1).joinToString(" - ") { it.tex }}\\)."))
+            })) else steps.add(Step("Shift$suffix", listOf(Block.Math("\\Delta = ${Tex.of(piece.delta)}"))))
+            steps.add(Step("Numerator$suffix", buildList {
+                add(Block.Text("After the traces and index contractions (before the shift):"))
+                add(Block.Math("N = ${Tex.of(piece.numerator, IndexNames(), open, close)}"))
+                add(Block.Text("After \\(k = \\ell - P\\), odd powers of \\(\\ell\\) vanish and \\(\\ell^\\mu\\ell^\\nu \\to g^{\\mu\\nu}\\ell^2/d\\):"))
+                for ((a, e) in piece.reduced.toSortedMap()) {
+                    val power = when (a) { 0 -> ""; 1 -> "\\ell^{2}\\,"; else -> "(\\ell^{2})^{$a}\\," }
+                    add(Block.Math("N_{$a} = $power${Tex.of(e, IndexNames(), open, close)}"))
+                }
+            }))
+        }
         steps.add(Step("Master integrals", listOf(
             Block.Math("\\int\\frac{d^{d}\\ell}{(2\\pi)^{d}}\\frac{(\\ell^{2})^{a}}{(\\ell^{2} - \\Delta)^{n}} = \\frac{(-1)^{n+a} i}{(4\\pi)^{d/2}}\\frac{\\Gamma(a + \\frac{d}{2})\\Gamma(n - a - \\frac{d}{2})}{\\Gamma(\\frac{d}{2})\\Gamma(n)}\\Delta^{\\frac{d}{2} + a - n}"),
-            Block.Text("Expanded about \\(d = 4\\) with \\(\\frac{1}{\\bar\\epsilon} = \\frac{1}{\\epsilon} - \\gamma_E + \\ln 4\\pi\\) (the \\(\\overline{\\text{MS}}\\) scheme):"),
+            Block.Text("Expanded about \\(d = 4\\) with \\(\\frac{1}{\\bar\\epsilon} = \\frac{1}{\\epsilon} - \\gamma_E + \\ln 4\\pi\\) (the MS-bar scheme):"),
             Block.Math("\\Gamma(\\epsilon)\\left(\\frac{4\\pi\\mu^{2}}{\\Delta}\\right)^{\\epsilon} = \\frac{1}{\\bar\\epsilon} - \\ln\\frac{\\Delta}{\\mu^{2}} + O(\\epsilon)"),
         )))
-        val measure = if (n == 1) "" else if (n == 2) "\\int_{0}^{1}dx\\," else "\\int dF\\,"
         steps.add(Step("Result", buildList {
             val lhs = "i\\mathcal{M}"
             val colorTex = amp.terms.singleOrNull()?.takeIf { it.color.isNotEmpty() }?.let { colorFactorTex(amp, it) }
             val cpre = colorTex?.let { "$it\\, " } ?: ""
             if (r.isFinite) add(Block.Text("No UV pole: the integral is finite."))
-            else {
-                add(Block.Math("$lhs\\big|_{\\text{UV}} = \\frac{i}{16\\pi^{2}\\bar\\epsilon}\\, $cpre${factoredTex(r.pole, IndexNames(), open, close)}"))
-            }
+            else add(Block.Math("$lhs\\big|_{\\text{UV}} = \\frac{i}{16\\pi^{2}\\bar\\epsilon}\\, $cpre${factoredTex(r.pole, IndexNames(), open, close)}"))
             add(Block.Text("The finite part:"))
-            val poly = r.finitePolynomial
-            val rest = r.finiteRest
             val parts = ArrayList<String>()
-            if (!poly.isZero) parts.add(factoredTex(poly, IndexNames(), open, close))
-            if (!rest.isZero) parts.add("$measure${Tex.paren(factoredTex(rest, IndexNames(), open, close))}")
+            if (!r.finitePolynomial.isZero) parts.add(factoredTex(r.finitePolynomial, IndexNames(), open, close))
+            for (piece in r.pieces) if (!piece.finiteRest.isZero) {
+                val measure = if (piece.n == 1) "" else if (piece.n == 2) "\\int_{0}^{1}dx\\," else "\\int dF\\,"
+                parts.add("$measure${Tex.paren(factoredTex(piece.finiteRest, IndexNames(), open, close))}")
+            }
             add(Block.Math("$lhs\\big|_{\\text{fin}} = \\frac{i}{16\\pi^{2}}\\, $cpre${if (parts.isEmpty()) "0" else parts.joinToString(" + ")}".replace("+ -", "- ")))
-            if (n > 2) add(Block.Text("\\(\\int dF\\) runs over \\(${r.xs.dropLast(1).joinToString(", ") { it.tex }} \\geq 0\\) with \\(${r.xs.dropLast(1).joinToString(" + ") { it.tex }} \\leq 1\\)."))
+            if (many) add(Block.Text("Each integral has its own \\(\\Delta\\) (given with it above)."))
+            val n = r.pieces.maxOf { it.n }
+            if (n > 2) add(Block.Text("\\(\\int dF\\) runs over the Feynman parameters \\(\\geq 0\\) with the free ones adding up to at most 1."))
             r.notes.forEach { add(Block.Note(it)) }
-            add(Block.Text("Give the masses and momenta values below to evaluate it."))
+            add(Block.Text("Give the masses and momenta values under Numbers to evaluate it."))
         }))
+        steps.add(Step("Passarino–Veltman functions", buildList {
+            add(Block.Text("The scalar integrals, with the loop factor \\(i/16\\pi^2\\) taken out:"))
+            add(Block.Math(Passarino.A0_TEX))
+            add(Block.Math(Passarino.B0_TEX))
+            add(Block.Math(Passarino.B0_R_TEX))
+            add(Block.Math("C_0 = -\\int dF\\, \\frac{1}{\\Delta - i0},\\qquad D_0 = \\int dF\\, \\frac{1}{(\\Delta - i0)^{2}}"))
+            add(Block.Text("Two-point integrals are evaluated in closed form (every \\(\\int_0^1 x^k \\ln\\Delta\\,dx\\) exactly, at the roots of the quadratic \\(\\Delta\\)); \\(C_0\\) with its inner integral in closed form; \\(D_0\\) numerically. Values are under Numbers."))
+        }))
+        Renorm.steps(amp, r, ctx, others)?.let { steps.add(it) }
         return steps
     }
 

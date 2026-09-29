@@ -92,9 +92,9 @@ object Squared {
             val remap = HashMap<CIdx, CIdx>()
             fun r(c: CIdx): CIdx = remap.getOrPut(c) {
                 val n = ext[c]
-                if (n != null) CIdx(-1000 - n, c.adjoint, c.hint) else CIdx(c.id * 10 + side + 5_000_000, c.adjoint, c.hint)
+                if (n != null) CIdx(-1000 - n, c.adjoint, "") else CIdx(c.id * 10 + side + 5_000_000, c.adjoint, c.hint)
             }
-            val factors = t.color.map { f -> when (f) { is ColorFactor.T -> ColorFactor.T(r(f.a), r(f.i), r(f.j)); is ColorFactor.F -> ColorFactor.F(r(f.a), r(f.b), r(f.c)) } }
+            val factors = t.color.map { f -> when (f) { is ColorFactor.T -> ColorFactor.T(r(f.a), r(f.i), r(f.j)); is ColorFactor.F -> ColorFactor.F(r(f.a), r(f.b), r(f.c)); is ColorFactor.D -> ColorFactor.D(r(f.i), r(f.j)) } }
             val externals = extOrder.map { n -> first.externals.first { it.number == n }.let { x -> CIdx(-1000 - n, x.particle.color == ColorRep.Octet, "") } }
             return Color.tensor(factors, externals)
         }

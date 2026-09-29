@@ -15,9 +15,11 @@ package com.example.feynman.physics
  * an integral over them, evaluated numerically for given masses and momenta.
  */
 
-class LoopDenominator(val line: Line, val particle: Particle, val offset: Mom, val mass: Sym?)
+/** One loop propagator denominator (k + o)² − m², as written. */
+class LoopDenominator(val tex: String, val offset: Mom, val m2: Expr, val m2Tex: String)
 
-class LoopResult(
+/** The integral for one set of denominators (in a general Rξ gauge there can be several). */
+class LoopPiece(
     val denominators: List<LoopDenominator>,
     val xs: List<Sym>,
     /** The shift P (as Σ coefficient × momentum). */
@@ -27,21 +29,41 @@ class LoopResult(
     val pole: Expr,
     /** The finite part's integrand over the Feynman parameters (times i/(16π²)). */
     val finiteIntegrand: Expr,
-    /** Its polynomial pieces integrated exactly; what's left needs numbers. */
+    /** Its polynomial pieces integrated exactly; what's left needs numbers (or a closed form). */
     val finitePolynomial: Expr,
     val finiteRest: Expr,
     /** A₀, B₀, C₀ or D₀ with its arguments. */
     val scalarName: String,
-    /** The numerator after the traces, before the shift. */
-    val numerator: Expr,
     /** The numerator after the shift and symmetric integration, by power a of ℓ². */
     val reduced: Map<Int, Expr>,
+    /** The numerator of this piece before the shift. */
+    val numerator: Expr,
+) {
+    val n get() = denominators.size
+    val free get() = if (n == 1) emptyList() else xs.dropLast(1)
+}
+
+class LoopResult(
+    val pieces: List<LoopPiece>,
+    /** The numerator after the traces, before the shift. */
+    val numerator: Expr,
     val kinematics: Kinematics,
     val notes: List<String>,
     val chains: List<Chain>,
 ) {
-    val n get() = denominators.size
+    val pole: Expr get() = sum(pieces.map { it.pole })
+    val finitePolynomial: Expr get() = sum(pieces.map { it.finitePolynomial })
     val isFinite get() = pole.isZero
+    // The first (usually only) piece, for single-integral results.
+    val denominators get() = pieces.first().denominators
+    val n get() = pieces.first().n
+    val xs get() = pieces.first().xs
+    val delta get() = pieces.first().delta
+    val finiteIntegrand get() = pieces.first().finiteIntegrand
+    val finiteRest get() = pieces.first().finiteRest
+    val shift get() = pieces.first().shift
+    val scalarName get() = pieces.first().scalarName
+    val reduced get() = pieces.first().reduced
 }
 
 object Loop {
@@ -174,39 +196,49 @@ object Loop {
     private fun harmonic(k: Int): Rational = (1..k).fold(Rational.ZERO) { acc, j -> acc + Rational.of(1, j.toLong()) }
     private fun factorial(k: Int): Long = (1..k).fold(1L) { acc, j -> acc * j }
 
+    private fun isLoopDen(a: Atom) = a is Den && a.content.atoms().any { it is Dot && (it.a == LOOP || it.b == LOOP) }
+
     fun evaluate(amp: Amplitude, kin: Kinematics, reduceDirac: Boolean = true): LoopResult? {
         val topo = amp.topology
         if (topo.loops != 1) return null
         val notes = ArrayList<String>()
-        // Loop denominators: the loop lines' Den atoms.
-        val dens = ArrayList<LoopDenominator>()
-        for ((line, q) in amp.loopLines) {
-            val p = SM.byId(line.particle) ?: continue
-            val ck = q[LOOP] ?: continue
-            val offset = (q - mom(LOOP).scale(ck)).scale(ck.reciprocal())
-            val mass = when {
-                p.isFermion -> amp.ctx.massOf(p)
-                p === SM.photon || p === SM.gluon || p === SM.ghostA || p === SM.ghostG -> null
-                else -> p.mass
-            }
-            dens.add(LoopDenominator(line, p, offset, mass))
-        }
-        if (dens.isEmpty()) return null
-        val n = dens.size
-        // The numerator: the amplitude without the loop denominators (colors are separate).
-        var numerator = Expr.ZERO
-        for (t in amp.terms) {
-            numerator += t.expr.mapTerms { k, c ->
-                val keep = k.mono.factors.filter { (a, _) ->
-                    !(a is Den && a.content.atoms().any { it is Dot && (it.a == LOOP || it.b == LOOP) })
-                }
-                Expr(mapOf(TermKey(Mono(keep), k.chains) to c))
-            }
-        }
         if (amp.terms.size > 1) notes.add("The four-gluon vertex's color structures are added with the color factors left out.")
-        numerator = contract(numerator)
+        // Group the terms by their loop denominators.
+        val groups = LinkedHashMap<String, Pair<List<Pair<Den, Int>>, Expr>>()
+        var all = Expr.ZERO
+        for (t in amp.terms) for ((k, c) in t.expr.terms) {
+            val dens = k.mono.factors.filter { (a, _) -> isLoopDen(a) }.map { (a, n) -> (a as Den) to n }
+            val keep = k.mono.factors.filter { (a, _) -> !isLoopDen(a) }
+            val term = Expr(mapOf(TermKey(Mono(keep), k.chains) to c))
+            val key = dens.joinToString("|") { "${it.first.key}^${it.second}" }
+            val prev = groups[key]
+            groups[key] = dens to ((prev?.second ?: Expr.ZERO) + term)
+            all += term
+        }
+        val pieces = ArrayList<LoopPiece>()
+        for ((_, g) in groups) {
+            val (dens, num) = g
+            if (num.isZero) continue
+            val list = dens.flatMap { (d, n) -> List(-n) { d } }
+            if (list.isEmpty()) { notes.add("A term without loop propagators vanishes in dimensional regularization."); continue }
+            piece(amp, kin, list, contract(num), reduceDirac, notes)?.let { pieces.add(it) }
+        }
+        if (pieces.isEmpty()) return null
+        if (pieces.size > 1) notes.add("The propagators give ${pieces.size} integrals with different denominators; their poles and finite parts are added.")
+        return LoopResult(pieces, contract(all), kin, notes.distinct(), amp.chains)
+    }
+
+    private fun piece(amp: Amplitude, kin: Kinematics, loopDens: List<Den>, numerator0: Expr, reduceDirac: Boolean, notes: MutableList<String>): LoopPiece? {
+        var numerator = numerator0
+        // Each denominator is (±k + r)² − m² = (k + o)² − m².
+        var offsets = loopDens.map { d ->
+            val q = d.q ?: return null
+            val ck = q[LOOP] ?: return null
+            (q - mom(LOOP).scale(ck)).scale(ck.reciprocal())
+        }
+        val masses2 = loopDens.map { it.m2 ?: Expr.ZERO }
+        val n = loopDens.size
         // A two-point function: p₂ = ±p₁.
-        var offsets = dens.map { it.offset }
         if (kin.twoPoint) {
             val (a, b) = kin.externals
             val sgn = if (a.incoming != b.incoming) Rational.ONE else Rational.of(-1)
@@ -215,6 +247,12 @@ object Loop {
                 val c = o[b.momentum] ?: return@map o
                 (o - mom(b.momentum).scale(c)) + mom(a.momentum).scale(c * sgn)
             }
+        }
+        val dens = loopDens.mapIndexed { i, d ->
+            val o = MomNames.tex(offsets[i])
+            val kp = if (offsets[i].isEmpty()) "k^{2}" else "\\left(k ${if (o.startsWith("-")) "- ${o.drop(1)}" else "+ $o"}\\right)^{2}"
+            val m2t = if (masses2[i].isZero) "0" else (d.display?.substringAfterLast(" - ") ?: Tex.of(masses2[i]))
+            LoopDenominator(if (masses2[i].isZero) kp else "$kp - $m2t", offsets[i], masses2[i], m2t)
         }
         // Feynman parameters; the last is 1 − the others.
         val xs = (1..n).map { feynmanParameter(it, n) }
@@ -228,7 +266,6 @@ object Loop {
             for ((c1, m1) in a) for ((c2, m2) in b) s += c1 * c2 * atom(Dot.of(m1, m2))
             return s
         }
-        val masses2 = dens.map { d -> d.mass?.let { sym(it, 2) } ?: Expr.ZERO }
         var cTerm = Expr.ZERO
         for ((i, o) in offsets.withIndex()) {
             val ol = o.map { (b, c) -> Expr.const(c) to b }
@@ -264,18 +301,16 @@ object Loop {
             }
         }
         // Positive powers of Δ are written out; the logarithm and 1/Δⁿ stay.
-        pole = kin.apply(pole.substitute(deltaSym, delta))
-        finite = kin.apply(finite.substitute(deltaSym, delta))
-        pole = Rules.simplifyRoots(pole)
-        finite = Rules.simplifyRoots(finite)
+        pole = Rules.simplifyRoots(kin.apply(pole.substitute(deltaSym, delta)))
+        finite = Rules.simplifyRoots(kin.apply(finite.substitute(deltaSym, delta)))
         if (delta.isZero) notes.add("Δ = 0: the integral has no scale and vanishes in dimensional regularization.")
         val free = if (n == 1) emptyList() else xs.dropLast(1)
         val poleInt = integrateSimplex(pole, free)
         val (poly, rest) = finite.terms.entries.partition { (k, _) -> k.mono.power(lnDelta) == 0 && k.mono.power(deltaSym) == 0 }
         val finitePoly = integrateSimplex(Expr(poly.associate { it.key to it.value }), free)
         val finiteRest = Expr(rest.associate { it.key to it.value })
-        val name = scalarName(dens, offsets, kin)
-        return LoopResult(dens, xs, shift, delta, poleInt, finite, finitePoly, finiteRest, name, numerator, reduced, kin, notes.distinct(), amp.chains)
+        val name = scalarName(dens, kin)
+        return LoopPiece(dens, xs, shift, delta, poleInt, finite, finitePoly, finiteRest, name, reduced, numerator)
     }
 
     /** ∫ over the simplex of the polynomial terms in [free] (all must be polynomial). */
@@ -297,13 +332,13 @@ object Loop {
 
     private fun bigFactorial(k: Int): java.math.BigInteger = (1..k).fold(java.math.BigInteger.ONE) { acc, j -> acc * java.math.BigInteger.valueOf(j.toLong()) }
 
-    private fun scalarName(dens: List<LoopDenominator>, offsets: List<Mom>, kin: Kinematics): String {
-        fun m2(d: LoopDenominator) = d.mass?.let { "${it.tex}^{2}" } ?: "0"
+    private fun scalarName(dens: List<LoopDenominator>, kin: Kinematics): String {
+        val offsets = dens.map { it.offset }
+        fun m2(d: LoopDenominator) = d.m2Tex
         fun inv(a: Mom, b: Mom): String {
             val diff = a - b
             if (diff.isEmpty()) return "0"
-            val e = kin.apply(dot(diff, diff))
-            return Tex.of(e)
+            return Tex.of(kin.apply(dot(diff, diff)))
         }
         return when (dens.size) {
             1 -> "A_0\\left(${m2(dens[0])}\\right)"
