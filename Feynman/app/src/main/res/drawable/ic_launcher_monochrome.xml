@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome: a QED vertex (two fermion lines and a photon) in the CAS Calculator icon style. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+        <path android:strokeColor="#FF000000" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M38,40 L51,54 L38,68" />
+    <path android:fillColor="#FF000000" android:pathData="M46.6,49.3 L41.2,47.8 L45.3,44 Z" />
+    <path android:fillColor="#FF000000" android:pathData="M42.1,63.6 L41.2,60.2 L46.6,58.7 Z" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="3" android:strokeLineCap="round"
+        android:pathData="M51,54 q2.6,-5 5.2,0 t5.2,0 t5.2,0 t5.2,0" />
+    <path android:fillColor="#FF000000" android:pathData="M48.5,54 A2.5,2.5 0 1,0 53.5,54 A2.5,2.5 0 1,0 48.5,54 Z" />
+</vector>
